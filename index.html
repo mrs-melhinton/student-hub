@@ -89,6 +89,10 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.82rem;background:var(
 .signin{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:12px}
 .loading{color:var(--muted);text-align:center;padding:40px 0}
 .secttl{display:flex;align-items:baseline;gap:8px}
+.seg{display:flex;flex-wrap:wrap;gap:8px}
+.seg label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:.95rem;cursor:pointer;background:var(--bg);min-height:40px}
+.seg label:has(input:checked){border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600}
+.seg input{accent-color:var(--accent);margin:0}
 button:focus-visible,a:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 </style>
 </head>
@@ -119,16 +123,19 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept"
 const LEDGER_STUDENTS = ["Mckinley", "Kyan"];
 function ledgerPart(item, m) {
   const words = String(m.body || "").replace(/\s+/g, " ").trim();
+  const note = words ? `notes (${m.note_by === "parent" ? "parent" : "student"}): ${words}` : "";
+  let base;
   switch (m.status) {
-    case "student says done": return "done (student)";
-    case "I confirm done": return "done (parent)";
-    case "plan note": return `notes (student): ${words}; note kind: plan`;
-    case "status note": return `notes (student): ${words}; note kind: status`;
-    case "settled: done": return "settled: done (parent)";
-    case "excused": return item.section === "followup" ? "settled: excused (parent)" : "excused by parent (doesn't have to be done; still graded)";
-    case "no count": return "no count (parent)";
+    case "student says done": base = "done (student)"; break;
+    case "I confirm done": base = "done (parent)"; break;
+    case "plan note": return `${note}; note kind: plan`;
+    case "status note": return `${note}; note kind: status`;
+    case "settled: done": base = "settled: done (parent)"; break;
+    case "excused": base = item.section === "followup" ? "settled: excused (parent)" : "excused by parent (doesn't have to be done; still graded)"; break;
+    case "no count": base = "no count (parent)"; break;
+    default: return null;
   }
-  return null;
+  return note ? `${base}; ${note}` : base;
 }
 function ledgerPending(itemsById, msgs) {
   return msgs.filter(m => m.kind === "status" && !m.copied_at && itemsById[m.item_id] && itemsById[m.item_id].origin === "tracker")
@@ -152,6 +159,8 @@ function ledgerText(itemsById, pending, now) {
 const hashParams = new URLSearchParams(location.hash.replace(/^#/, ""));
 const TOKEN = hashParams.get("t");
 const MODE = TOKEN ? "kid" : "parent";
+// Preview: the kids' view, read-only (add &preview=1 to the family link). Nothing is sent or marked read.
+const PREVIEW = MODE === "kid" && hashParams.get("preview") === "1";
 const sb = supabase.createClient(SB_URL, SB_KEY, MODE === "kid"
   ? { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
   : { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit", storageKey: "student-hub-auth" } });
@@ -164,7 +173,7 @@ const ls = {
 const S = {
   phase: "loading", items: [], msgs: [], student: STUDENTS.includes(ls.get("hub-student")) ? ls.get("hub-student") : "Kyan",
   section: "todo", open: new Set(), review: false, drafts: {}, micMsg: {}, notice: "", rec: null,
-  statusSel: {}, noteText: {}, editing: null, adding: false, clipUrls: {}, fallback: null, session: null, err: ""
+  statusSel: {}, noteText: {}, noteBy: {}, speaker: {}, editing: null, adding: false, clipUrls: {}, fallback: null, session: null, err: ""
 };
 const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
@@ -189,7 +198,8 @@ function unreadOf(id) {
 }
 function lastReply(id) { const r = threadOf(id).filter(m => m.kind === "reply"); return r[r.length - 1] || null; }
 function needsReview(id) {
-  const t = threadOf(id); const r = t.filter(m => m.kind === "reply"); if (!r.length) return false;
+  // replies Melissa typed in herself don't need her review
+  const t = threadOf(id); const r = t.filter(m => m.kind === "reply" && m.entered_by !== "parent"); if (!r.length) return false;
   const s = t.filter(m => m.kind === "status");
   return !s.length || r[r.length - 1].created_at > s[s.length - 1].created_at;
 }
@@ -229,7 +239,7 @@ async function loadClips() {
 }
 
 async function markRead(id) {
-  if (!unreadOf(id)) return;
+  if (PREVIEW || !unreadOf(id)) return;
   const t = new Date().toISOString();
   if (MODE === "kid") {
     const { error } = await sb.rpc("kid_mark_read", { p_token: TOKEN, p_item_id: id });
@@ -283,7 +293,8 @@ function view() {
   }).join("")}</nav>`;
   const fb = S.fallback ? `<div class="warn">Your browser blocked copying. Select the text below and copy it, then tap "I copied it".
     <pre id="fbtext">${esc(S.fallback.text)}</pre><div class="row" style="margin-top:8px"><button class="btn small" data-act="markcopied">I copied it — mark as copied</button><button class="btn ghost small" data-act="cancelcopy">Cancel</button></div></div>` : "";
-  return head + sw + bar + tabs + `</header>` + nt + fb + `<main>${S.review ? reviewView(st) : sectionView(st, S.section)}</main>`;
+  const pv = PREVIEW ? `<div class="warn"><strong>Preview</strong> — this is what Kyan and Mckinley see. Replies are off, and nothing is marked as read.</div>` : "";
+  return head + pv + sw + bar + tabs + `</header>` + nt + fb + `<main>${S.review ? reviewView(st) : sectionView(st, S.section)}</main>`;
 }
 
 function signinView() {
@@ -356,10 +367,22 @@ function card(i) {
 }
 
 function whoLabel(a) { return a === "parent" ? (MODE === "kid" ? "Mom" : "You") : a === "kyan" ? "Kyan" : "Mckinley"; }
+function replyLabel(m) {
+  const kid = whoLabel(m.author);
+  if (m.entered_by !== "parent") return kid;
+  return MODE === "kid" ? `${kid} (told Mom)` : `${kid} · typed in by you`;
+}
+function noteWho(m, item) {
+  if (m.note_by === "parent") return MODE === "kid" ? "Mom's words" : "your words";
+  const kid = item ? item.student : "student";
+  return MODE === "kid" ? "your words" : `${kid}'s words`;
+}
 function statusLine(m) {
-  if (MODE === "parent") return `Status: ${esc(m.status)}${m.body ? ` — “${esc(m.body)}”` : ""}`;
+  const item = S.items.find(i => i.id === m.item_id);
+  const note = m.body ? ` — “${esc(m.body)}” <span class="tx" style="display:inline">(${noteWho(m, item)})</span>` : "";
+  if (MODE === "parent") return `Status: ${esc(m.status)}${note}`;
   return ({ "student says done": "Noted: you said it's done", "I confirm done": "Confirmed done", "plan note": "Plan noted", "status note": "Noted",
-    "settled: done": "Settled: done", "excused": "Excused", "no count": "No count" }[m.status] || esc(m.status)) + (m.body ? `: “${esc(m.body)}”` : "");
+    "settled: done": "Settled: done", "excused": "Excused", "no count": "No count" }[m.status] || esc(m.status)) + note;
 }
 function msgView(m) {
   if (m.kind === "status") return `<div class="msg status">✔ ${statusLine(m)}<span class="who">— ${whoLabel(m.author)}, ${when(m.created_at)}</span></div>`;
@@ -370,7 +393,7 @@ function msgView(m) {
     clip = MODE === "parent" ? `<audio controls preload="none" id="clip-${m.id}"></audio>` : `<div class="tx">🎙 Voice reply sent</div>`;
     clip += `<div class="tx">Transcript: ${m.transcript ? esc(m.transcript) : "<em>no transcript</em>"}</div>`;
   }
-  return `<div class="msg ${cls}"><span class="who">${whoLabel(m.author)} · ${when(m.created_at)}</span>${m.body ? br(m.body) : ""}${clip}</div>`;
+  return `<div class="msg ${cls}"><span class="who">${m.kind === "reply" ? replyLabel(m) : whoLabel(m.author)} · ${when(m.created_at)}</span>${m.body ? br(m.body) : ""}${clip}</div>`;
 }
 
 function threadView(i, t) {
@@ -379,6 +402,7 @@ function threadView(i, t) {
 }
 
 function kidComposer(i) {
+  if (PREVIEW) return `<p class="tx">Replies are turned off in preview. Here, ${esc(i.student)} sees a box to type a reply and a 🎙 Record button.</p>`;
   const id = i.id, k = sid(id), R = S.rec && S.rec.id === id ? S.rec : null;
   const canRec = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
   const mic = S.micMsg[id] ? `<div class="warn">${esc(S.micMsg[id])}</div>` : "";
@@ -400,19 +424,31 @@ function kidComposer(i) {
 }
 
 function parentComposer(i) {
-  const id = i.id, k = sid(id);
-  let html = `<div class="composer"><label class="f" for="d-${k}">Message to ${esc(i.student)}</label>
-    <textarea id="d-${k}" data-draft="${esc(id)}" placeholder="What's expected…">${esc(S.drafts[id] || "")}</textarea>
-    <div class="row"><button class="btn" data-act="pmsg" data-id="${esc(id)}">Send message</button></div></div>`;
+  const id = i.id, k = sid(id), kid = i.student;
+  const sp = S.speaker[id] || "me";
+  let html = `<div class="composer">
+    <div class="seg" role="radiogroup" aria-label="Who is speaking">
+      <label><input type="radio" name="sp-${k}" data-speaker="${esc(id)}" value="me" ${sp === "me" ? "checked" : ""}> Message to ${esc(kid)}</label>
+      <label><input type="radio" name="sp-${k}" data-speaker="${esc(id)}" value="kid" ${sp === "kid" ? "checked" : ""}> ${esc(kid)} told me</label>
+    </div>
+    <textarea id="d-${k}" data-draft="${esc(id)}" aria-label="${sp === "me" ? `Message to ${esc(kid)}` : `What ${esc(kid)} told you`}" placeholder="${sp === "me" ? "What's expected…" : `What ${esc(kid)} said, in their words…`}">${esc(S.drafts[id] || "")}</textarea>
+    <div class="row"><button class="btn" data-act="pmsg" data-id="${esc(id)}">${sp === "me" ? "Send message" : `Save as ${esc(kid)}'s reply`}</button></div></div>`;
   if (i.origin === "tracker") {
     const opts = STATUSES.filter(s => s !== "settled: done" || i.section === "followup");
     const cur = S.statusSel[id] || "";
     const lr = lastReply(id);
-    const pre = S.noteText[id] ?? (lr ? (lr.body || lr.transcript || "") : "");
+    const need = NOTE_STATUSES.includes(cur);
+    const nb = S.noteBy[id] || "parent";
     html += `<div class="statusbox"><label class="f" for="s-${k}">Set a status${lr && needsReview(id) ? " (answers the latest reply)" : ""}</label>
       <select id="s-${k}" data-statussel="${esc(id)}"><option value="">Choose…</option>${opts.map(s => `<option ${s === cur ? "selected" : ""}>${esc(s)}</option>`).join("")}</select>
-      ${NOTE_STATUSES.includes(cur) ? `<label class="f" for="n-${k}">Note (the student's words)<textarea id="n-${k}" data-notetext="${esc(id)}">${esc(pre)}</textarea></label>` : ""}
-      <div class="row"><button class="btn ghost" data-act="pstatus" data-id="${esc(id)}" ${cur ? "" : "disabled"}>Save status</button></div></div>`;
+      <label class="f" for="n-${k}">${need ? "Note (needed for this status)" : "Note (optional)"}</label>
+      <textarea id="n-${k}" data-notetext="${esc(id)}" placeholder="Add a note…">${esc(S.noteText[id] || "")}</textarea>
+      <div class="seg" role="radiogroup" aria-label="Whose words is the note">
+        <label><input type="radio" name="nb-${k}" data-noteby="${esc(id)}" value="parent" ${nb === "parent" ? "checked" : ""}> My words</label>
+        <label><input type="radio" name="nb-${k}" data-noteby="${esc(id)}" value="student" ${nb === "student" ? "checked" : ""}> ${esc(kid)}'s words</label>
+      </div>
+      ${lr && (lr.body || lr.transcript) ? `<div class="row"><button class="btn ghost small" data-act="usereply" data-id="${esc(id)}">Use ${esc(kid)}'s last reply as the note</button></div>` : ""}
+      <div class="row"><button class="btn" data-act="pstatus" data-id="${esc(id)}" ${cur ? "" : "disabled"}>Save status</button></div></div>`;
   } else {
     if (S.editing === id) {
       html += `<div class="form statusbox"><label class="f">Title<input type="text" id="et-${k}" value="${esc(i.name)}"></label>
@@ -544,25 +580,31 @@ async function act(a, el) {
     case "recdiscard": discardRec(); break;
     case "recsend": sendRec(); break;
     case "pmsg": {
-      const body = (S.drafts[id] || "").trim(); if (!body) { notice("Type a message first."); return; }
+      const body = (S.drafts[id] || "").trim(); if (!body) { notice("Type something first."); return; }
+      const item = S.items.find(x => x.id === id);
+      const asKid = (S.speaker[id] || "me") === "kid";
       el.disabled = true;
-      const { error } = await sb.from("messages").insert({ item_id: id, author: "parent", kind: "message", body });
-      if (error) { notice("Couldn't send: " + error.message); return; }
-      S.drafts[id] = ""; S.notice = "Message sent."; await load(); break;
+      const row = asKid
+        ? { item_id: id, author: item.student.toLowerCase(), kind: "reply", body, entered_by: "parent", read_by_parent_at: new Date().toISOString() }
+        : { item_id: id, author: "parent", kind: "message", body };
+      const { error } = await sb.from("messages").insert(row);
+      if (error) { notice("Couldn't save: " + error.message); return; }
+      S.drafts[id] = ""; S.notice = asKid ? `Saved as ${item.student}'s reply.` : "Message sent."; await load(); break;
+    }
+    case "usereply": {
+      const lr = lastReply(id); if (!lr) return;
+      S.noteText[id] = lr.body || lr.transcript || ""; S.noteBy[id] = "student"; render(); break;
     }
     case "pstatus": {
       const status = S.statusSel[id]; if (!status) return;
       const lr = lastReply(id);
-      let body = null;
-      if (NOTE_STATUSES.includes(status)) {
-        body = (S.noteText[id] ?? (lr ? (lr.body || lr.transcript || "") : "")).trim();
-        if (!body) { notice("A note needs the student's words."); return; }
-      }
+      const body = (S.noteText[id] || "").trim() || null;
+      if (NOTE_STATUSES.includes(status) && !body) { notice("This status needs a note. Type one, or use the last reply."); return; }
       el.disabled = true;
       const { error } = await sb.from("messages").insert({ item_id: id, author: "parent", kind: "status", status, body,
-        reply_to: lr && needsReview(id) ? lr.id : null });
+        note_by: body ? (S.noteBy[id] || "parent") : null, reply_to: lr && needsReview(id) ? lr.id : null });
       if (error) { notice("Couldn't save the status: " + error.message); return; }
-      delete S.statusSel[id]; delete S.noteText[id]; S.notice = `Status saved: ${status}.`; await load(); break;
+      delete S.statusSel[id]; delete S.noteText[id]; delete S.noteBy[id]; S.notice = `Status saved: ${status}.`; await load(); break;
     }
     case "copyledger": await copyLedger(); break;
     case "markcopied": await markCopied(S.fallback.ids); S.fallback = null; render(); break;
@@ -630,6 +672,8 @@ document.addEventListener("input", e => {
 document.addEventListener("change", e => {
   const t = e.target;
   if (t.dataset.statussel !== undefined) { S.statusSel[t.dataset.statussel] = t.value; render(); }
+  if (t.dataset.speaker !== undefined) { S.speaker[t.dataset.speaker] = t.value; render(); }
+  if (t.dataset.noteby !== undefined) { S.noteBy[t.dataset.noteby] = t.value; render(); }
 });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && S.phase === "ready" && !S.rec) load(); });
 
