@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Student Hub</title>
+<style>
+:root{
+  --bg:#f5f6f2; --card:#ffffff; --ink:#1f2933; --muted:#5d6872; --line:#dde2dd;
+  --accent:#2d6886; --accent-ink:#ffffff; --accent-soft:#e2edf2;
+  --miss:#b03a2e; --miss-soft:#f8e7e4; --unk:#5b626b; --unk-soft:#eceef0;
+  --fu:#2c7466; --fu-soft:#e1f0ec; --todo:#8a6414; --todo-soft:#f6eedb;
+  --ok:#2e7543; --ok-soft:#e3f1e6; --dot:#d2462f; --me:#eef3f6; --kid:#f3f1ea;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#14181c; --card:#1c2228; --ink:#e7ebee; --muted:#9ba6b0; --line:#2d353d;
+  --accent:#86b9d4; --accent-ink:#10181d; --accent-soft:#1f3340;
+  --miss:#f0938a; --miss-soft:#3a2220; --unk:#b6bcc4; --unk-soft:#262c33;
+  --fu:#7fcdbd; --fu-soft:#183029; --todo:#e3bd6b; --todo-soft:#33291a;
+  --ok:#8ed3a0; --ok-soft:#1a2f20; --dot:#ff7a62; --me:#1f2a31; --kid:#262520;
+  color-scheme:dark;
+}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:18px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  padding:calc(12px + env(safe-area-inset-top,0px)) 16px calc(48px + env(safe-area-inset-bottom,0px))}
+.wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font-size:1.5rem;margin:0;font-weight:700;letter-spacing:-.01em}
+h2{font-size:1.1rem;margin:0}
+h3{font-size:.85rem;margin:18px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+a{color:var(--accent)}
+p{margin:0}
+.muted{color:var(--muted)}
+.top{display:flex;flex-direction:column;gap:12px}
+.topline{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.switch{display:flex;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px;gap:4px}
+.switch button{flex:1;border:0;background:transparent;color:var(--ink);font:inherit;font-weight:600;padding:10px 8px;border-radius:10px;min-height:48px;cursor:pointer}
+.switch button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:.95rem;padding:8px 14px;border-radius:999px;min-height:44px;cursor:pointer;white-space:nowrap}
+.tabs button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600}
+.count{font-variant-numeric:tabular-nums;color:var(--muted);font-size:.85em;margin-left:4px}
+.udot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--dot);margin-left:6px;vertical-align:middle}
+.card{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--line);border-radius:12px;padding:14px 14px 12px;display:flex;flex-direction:column;gap:6px}
+.card.missing{border-left-color:var(--miss)} .card.unknown{border-left-color:var(--unk)}
+.card.followup{border-left-color:var(--fu)} .card.todo{border-left-color:var(--todo)}
+.card.college,.card.other{border-left-color:var(--accent)}
+.list{display:flex;flex-direction:column;gap:10px}
+.cls{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.name{font-size:1.05rem;overflow-wrap:anywhere}
+.name a{text-decoration:none}
+.meta{font-size:.92rem;color:var(--muted)}
+.detail{font-size:.95rem;overflow-wrap:anywhere}
+.chip{display:inline-block;font-size:.78rem;font-weight:600;padding:2px 8px;border-radius:6px;background:var(--todo-soft);color:var(--todo)}
+.toggle{align-self:flex-start;border:0;background:transparent;color:var(--accent);font:inherit;font-size:.95rem;font-weight:600;padding:6px 0;min-height:40px;cursor:pointer}
+.thread{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:10px;margin-top:4px}
+.msg{border-radius:10px;padding:9px 12px;font-size:.98rem;overflow-wrap:anywhere}
+.msg.parent{background:var(--me)}
+.msg.kid{background:var(--kid)}
+.msg.status{background:var(--ok-soft);color:var(--ok);font-weight:600;font-size:.92rem}
+.who{display:block;font-size:.78rem;color:var(--muted);font-weight:600;margin-bottom:2px}
+.msg.status .who{display:inline;margin:0 0 0 4px;font-weight:400}
+.tx{font-size:.88rem;color:var(--muted);margin-top:4px}
+audio{width:100%;margin-top:6px}
+textarea,input[type=text],input[type=date],input[type=email],select{width:100%;font:inherit;font-size:1rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+textarea{min-height:64px;resize:vertical}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;font-size:1rem;padding:10px 16px;border-radius:10px;min-height:46px;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.small{font-size:.9rem;min-height:38px;padding:6px 12px}
+.btn.rec{border-color:var(--miss);color:var(--miss);background:transparent}
+.btn.recording{background:var(--miss);color:#fff;border-color:var(--miss)}
+.btn:disabled{opacity:.5;cursor:default}
+.composer,.statusbox,.form{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.statusbox{border-top:1px dashed var(--line);padding-top:10px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:.9rem;color:var(--muted);font-weight:600}
+.warn{background:var(--todo-soft);color:var(--todo);border-radius:10px;padding:10px 12px;font-size:.95rem}
+.notice{background:var(--accent-soft);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:.95rem;display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.notice button{border:0;background:transparent;font:inherit;color:var(--muted);cursor:pointer}
+.empty{color:var(--muted);font-style:italic;padding:8px 2px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filter{border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:.95rem;padding:8px 14px;border-radius:999px;min-height:44px;cursor:pointer}
+.filter[aria-pressed="true"]{border-color:var(--miss);background:var(--miss-soft);color:var(--miss);font-weight:600}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.82rem;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;max-height:300px;overflow:auto;margin:0}
+.signin{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:12px}
+.loading{color:var(--muted);text-align:center;padding:40px 0}
+.secttl{display:flex;align-items:baseline;gap:8px}
+button:focus-visible,a:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="loading">Loading…</p></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+"use strict";
+// ---------- settings (publishable key only; no tokens or secret keys live in this file) ----------
+const SB_URL = "https://moznvnejdjhwawbsyqvi.supabase.co";
+const SB_KEY = "sb_publishable_rYolPZhV_rye_bKMlanOZQ_ML73btgI";
+const SITE = location.origin + location.pathname;
+const PARENT_EMAIL = "melissa.hinton1@gmail.com";
+
+const STUDENTS = ["Kyan", "Mckinley"];
+const CLASS_ORDER = {
+  Mckinley: ["Calculus", "AP Biology", "Physics in the Universe", "UW Psychology 101", "ENGL 131"],
+  Kyan: ["Chemistry in Earth System", "Biotechnology I", "English 10", "Pre-Calculus", "World History 10"]
+};
+const SECTIONS = { Mckinley: ["todo", "mu", "followup", "college", "other"], Kyan: ["todo", "mu", "followup", "other"] };
+const SEC_LABEL = { todo: "📝 To Do", mu: "🔴 Missing & ⚫ Unknown", followup: "🔁 Follow Up", college: "🎓 College Apps", other: "🗂 Other" };
+const STATUSES = ["student says done", "I confirm done", "plan note", "status note", "settled: done", "excused", "no count"];
+const NOTE_STATUSES = ["plan note", "status note"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"];
+
+// ---------- Copy for ledger: same line format as the Feedback Ledger's "Copy new answers" ----------
+// LEDGER-BEGIN
+const LEDGER_STUDENTS = ["Mckinley", "Kyan"];
+function ledgerPart(item, m) {
+  const words = String(m.body || "").replace(/\s+/g, " ").trim();
+  switch (m.status) {
+    case "student says done": return "done (student)";
+    case "I confirm done": return "done (parent)";
+    case "plan note": return `notes (student): ${words}; note kind: plan`;
+    case "status note": return `notes (student): ${words}; note kind: status`;
+    case "settled: done": return "settled: done (parent)";
+    case "excused": return item.section === "followup" ? "settled: excused (parent)" : "excused by parent (doesn't have to be done; still graded)";
+    case "no count": return "no count (parent)";
+  }
+  return null;
+}
+function ledgerPending(itemsById, msgs) {
+  return msgs.filter(m => m.kind === "status" && !m.copied_at && itemsById[m.item_id] && itemsById[m.item_id].origin === "tracker")
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+}
+function ledgerText(itemsById, pending, now) {
+  const stamp = now.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  let out = `FEEDBACK LEDGER UPDATES — copied ${stamp}\nEach line starts with the tracker row ID.\n`;
+  LEDGER_STUDENTS.forEach(st => {
+    const lines = pending.filter(m => itemsById[m.item_id].student === st).map(m => {
+      const it = itemsById[m.item_id];
+      return `- [${it.id}] ${it.cls} — ${it.name}: ${ledgerPart(it, m)}`;
+    });
+    if (lines.length) out += `\n${st.toUpperCase()}\n` + lines.join("\n") + "\n";
+  });
+  return out;
+}
+// LEDGER-END
+
+// ---------- mode: the family token lives only after the # in the link ----------
+const hashParams = new URLSearchParams(location.hash.replace(/^#/, ""));
+const TOKEN = hashParams.get("t");
+const MODE = TOKEN ? "kid" : "parent";
+const sb = supabase.createClient(SB_URL, SB_KEY, MODE === "kid"
+  ? { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+  : { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit", storageKey: "student-hub-auth" } });
+
+// ---------- state ----------
+const ls = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
+const S = {
+  phase: "loading", items: [], msgs: [], student: STUDENTS.includes(ls.get("hub-student")) ? ls.get("hub-student") : "Kyan",
+  section: "todo", open: new Set(), review: false, drafts: {}, micMsg: {}, notice: "", rec: null,
+  statusSel: {}, noteText: {}, editing: null, adding: false, clipUrls: {}, fallback: null, session: null, err: ""
+};
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+// ---------- helpers ----------
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const br = s => esc(s).replace(/\n/g, "<br>");
+const rank = (st, c) => { const i = (CLASS_ORDER[st] || []).indexOf(c); return i < 0 ? 99 : i; };
+const secOf = i => (i.section === "missing" || i.section === "unknown") ? "mu" : i.section;
+const sid = id => String(id).replace(/[^A-Za-z0-9_-]/g, "_");
+function when(ts) {
+  const d = new Date(ts); let h = d.getHours(); const ap = h < 12 ? "am" : "pm"; h = h % 12 || 12;
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${h}:${String(d.getMinutes()).padStart(2, "0")}${ap}`;
+}
+function weekday(sort) { const d = new Date(sort + "T12:00:00"); return isNaN(d) ? "" : d.toLocaleDateString("en-US", { weekday: "short" }) + ", "; }
+function dueText(dateStr) { if (!dateStr) return ""; const [y, m, d] = dateStr.split("-").map(Number); return `${MONTHS[m - 1]} ${d}`; }
+const byName = (a, b) => a.name.localeCompare(b.name);
+const bySort = (a, b) => String(a.sort).localeCompare(String(b.sort)) || rank(a.student, a.cls) - rank(b.student, b.cls) || byName(a, b);
+const live = i => i.active !== false && !i.archived_at;
+const threadOf = id => S.msgs.filter(m => m.item_id === id);
+function unreadOf(id) {
+  return threadOf(id).filter(m => MODE === "kid" ? (m.author === "parent" && !m.read_by_student_at) : (m.kind === "reply" && !m.read_by_parent_at)).length;
+}
+function lastReply(id) { const r = threadOf(id).filter(m => m.kind === "reply"); return r[r.length - 1] || null; }
+function needsReview(id) {
+  const t = threadOf(id); const r = t.filter(m => m.kind === "reply"); if (!r.length) return false;
+  const s = t.filter(m => m.kind === "status");
+  return !s.length || r[r.length - 1].created_at > s[s.length - 1].created_at;
+}
+const itemsOf = st => S.items.filter(i => live(i) && i.student === st);
+function notice(t) { S.notice = t; render(); }
+
+// ---------- data ----------
+async function load() {
+  try {
+    if (MODE === "kid") {
+      const [a, b] = await Promise.all([sb.rpc("kid_items", { p_token: TOKEN }), sb.rpc("kid_messages", { p_token: TOKEN })]);
+      const e = a.error || b.error;
+      if (e) { S.phase = /invalid family link/i.test(e.message || "") ? "badlink" : "error"; S.err = e.message || ""; render(); return; }
+      S.items = a.data || []; S.msgs = b.data || [];
+    } else {
+      const [a, b] = await Promise.all([sb.from("items").select("*"), sb.from("messages").select("*").order("created_at")]);
+      const e = a.error || b.error;
+      if (e) { S.phase = "error"; S.err = e.message || ""; render(); return; }
+      if (!a.data.length) { S.phase = "notparent"; render(); return; }
+      S.items = a.data; S.msgs = b.data;
+    }
+    S.phase = "ready";
+  } catch (e) { S.phase = "error"; S.err = String(e && e.message || e); }
+  render();
+  if (MODE === "parent") loadClips();
+}
+
+async function loadClips() {
+  const need = S.msgs.filter(m => m.audio_path && S.open.has(m.item_id) && !(S.clipUrls[m.id] && S.clipUrls[m.id].exp > Date.now()));
+  for (const m of need) {
+    const { data } = await sb.storage.from("voice-clips").createSignedUrl(m.audio_path, 3600);
+    if (data && data.signedUrl) {
+      S.clipUrls[m.id] = { url: data.signedUrl, exp: Date.now() + 50 * 60 * 1000 };
+      const el = document.getElementById("clip-" + m.id); if (el) el.src = data.signedUrl;
+    }
+  }
+}
+
+async function markRead(id) {
+  if (!unreadOf(id)) return;
+  const t = new Date().toISOString();
+  if (MODE === "kid") {
+    const { error } = await sb.rpc("kid_mark_read", { p_token: TOKEN, p_item_id: id });
+    if (!error) S.msgs.forEach(m => { if (m.item_id === id && m.author === "parent" && !m.read_by_student_at) m.read_by_student_at = t; });
+  } else {
+    const ids = threadOf(id).filter(m => m.kind === "reply" && !m.read_by_parent_at).map(m => m.id);
+    const { error } = await sb.from("messages").update({ read_by_parent_at: t }).in("id", ids);
+    if (!error) S.msgs.forEach(m => { if (ids.includes(m.id)) m.read_by_parent_at = t; });
+  }
+  render();
+}
+
+// ---------- rendering ----------
+function render() {
+  const app = document.getElementById("app");
+  const f = document.activeElement; const fid = f && f.id; const sel = f && "selectionStart" in f ? [f.selectionStart, f.selectionEnd] : null;
+  app.innerHTML = view();
+  if (fid) { const el = document.getElementById(fid); if (el) { el.focus(); if (sel) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
+  Object.entries(S.clipUrls).forEach(([id, c]) => { const el = document.getElementById("clip-" + id); if (el && !el.src) el.src = c.url; });
+}
+
+function view() {
+  const head = `<header class="top"><div class="topline"><h1>Student Hub${MODE === "parent" ? " <span class='muted' style='font-weight:400;font-size:.95rem'>· my view</span>" : ""}</h1>${
+    MODE === "parent" && S.session ? `<div class="bar"><button class="btn ghost small" data-act="refresh">↻ Refresh</button><button class="btn ghost small" data-act="signout">Sign out</button></div>` :
+    MODE === "kid" && S.phase === "ready" ? `<button class="btn ghost small" data-act="refresh">↻ Refresh</button>` : ""}</div>`;
+  const nt = S.notice ? `<div class="notice" role="status"><span>${esc(S.notice)}</span><button data-act="dismiss" aria-label="Dismiss">✕</button></div>` : "";
+  if (S.phase === "loading") return head + `</header><p class="loading">Loading…</p>`;
+  if (S.phase === "signin") return head + `</header>` + nt + signinView();
+  if (S.phase === "badlink") return head + `</header><div class="warn">This link doesn't work anymore. Ask Mom for the new link.</div>`;
+  if (S.phase === "notparent") return head + `</header><div class="warn">This account can't use the hub. Sign out and use ${esc(PARENT_EMAIL)}.</div>`;
+  if (S.phase === "error") return head + `</header><div class="warn">Couldn't load the hub. Check your connection and tap Refresh.<br><small>${esc(S.err)}</small></div>`;
+
+  const st = S.student;
+  const secs = SECTIONS[st];
+  if (!secs.includes(S.section)) S.section = "todo";
+  const sw = `<div class="switch" role="group" aria-label="Student">${STUDENTS.map(s => {
+    const n = MODE === "kid" ? itemsOf(s).reduce((t, i) => t + unreadOf(i.id), 0) : itemsOf(s).filter(i => needsReview(i.id)).length;
+    return `<button data-act="sw" data-st="${s}" aria-pressed="${s === st}">${s}${n ? `<span class="udot" aria-label="${n} new"></span>` : ""}</button>`;
+  }).join("")}</div>`;
+  let bar = "";
+  if (MODE === "parent") {
+    const nRev = itemsOf(st).filter(i => needsReview(i.id)).length;
+    const pend = ledgerPending(byId(), S.msgs).length;
+    bar = `<div class="bar"><button class="filter" data-act="review" aria-pressed="${S.review}">Needs my review <span class="count">${nRev}</span></button>
+      <button class="btn small" data-act="copyledger" ${pend ? "" : "disabled"}>Copy for ledger (${pend})</button></div>`;
+  }
+  const tabs = S.review ? "" : `<nav class="tabs" aria-label="Sections">${secs.map(k => {
+    const list = itemsOf(st).filter(i => secOf(i) === k);
+    const un = list.some(i => MODE === "kid" ? unreadOf(i.id) : needsReview(i.id));
+    return `<button data-act="sec" data-sec="${k}" aria-pressed="${k === S.section}">${SEC_LABEL[k]}<span class="count">${list.length}</span>${un ? '<span class="udot"></span>' : ""}</button>`;
+  }).join("")}</nav>`;
+  const fb = S.fallback ? `<div class="warn">Your browser blocked copying. Select the text below and copy it, then tap "I copied it".
+    <pre id="fbtext">${esc(S.fallback.text)}</pre><div class="row" style="margin-top:8px"><button class="btn small" data-act="markcopied">I copied it — mark as copied</button><button class="btn ghost small" data-act="cancelcopy">Cancel</button></div></div>` : "";
+  return head + sw + bar + tabs + `</header>` + nt + fb + `<main>${S.review ? reviewView(st) : sectionView(st, S.section)}</main>`;
+}
+
+function signinView() {
+  return `<div class="signin"><h2>Sign in</h2><p class="muted">We'll email you a sign-in link. You stay signed in on this device.</p>
+    <label class="f">Email<input type="email" id="email" value="${esc(PARENT_EMAIL)}" autocomplete="email"></label>
+    <button class="btn" data-act="signin">Email me a sign-in link</button></div>`;
+}
+
+function byId() { const o = {}; S.items.forEach(i => { o[i.id] = i; }); return o; }
+
+function sectionView(st, k) {
+  const list = itemsOf(st).filter(i => secOf(i) === k);
+  let html = "";
+  if (MODE === "parent" && (k === "college" || k === "other")) html += addForm(st, k);
+  if (!list.length) return html + `<p class="empty">None</p>`;
+  return html + groups(k, list).map(g => (g.title ? `<h3>${esc(g.title)}</h3>` : "") + `<div class="list">${g.items.map(card).join("")}</div>`).join("");
+}
+
+function groups(k, list) {
+  if (k === "todo") {
+    const out = []; const rem = list.filter(i => i.reminder).sort(bySort);
+    if (rem.length) out.push({ title: "Study reminders", items: rem });
+    const dated = list.filter(i => !i.reminder && i.due);
+    [...new Set(dated.map(i => i.sort))].sort().forEach(s => {
+      const g = dated.filter(i => i.sort === s).sort((a, b) => rank(a.student, a.cls) - rank(b.student, b.cls) || byName(a, b));
+      out.push({ title: weekday(s) + g[0].due, items: g });
+    });
+    const und = list.filter(i => !i.reminder && !i.due).sort((a, b) => rank(a.student, a.cls) - rank(b.student, b.cls) || byName(a, b));
+    if (und.length) out.push({ title: "Undated", items: und });
+    return out;
+  }
+  if (k === "mu" || k === "followup") {
+    const st = list[0].student;
+    return [...new Set(list.map(i => i.cls))].sort((a, b) => rank(st, a) - rank(st, b) || String(a).localeCompare(String(b)))
+      .map(c => ({ title: c, items: list.filter(i => i.cls === c).sort((a, b) => String(a.sort).localeCompare(String(b.sort)) || byName(a, b)) }));
+  }
+  return [{ title: "", items: list.slice().sort((a, b) => String(a.sort).localeCompare(String(b.sort)) || byName(a, b)) }];
+}
+
+function reviewView(st) {
+  const list = itemsOf(st).filter(i => needsReview(i.id));
+  if (!list.length) return `<p class="empty">Nothing waiting for review for ${esc(st)}.</p>`;
+  return SECTIONS[st].map(k => {
+    const l = list.filter(i => secOf(i) === k).sort(bySort);
+    return l.length ? `<h3>${esc(SEC_LABEL[k])}</h3><div class="list">${l.map(card).join("")}</div>` : "";
+  }).join("");
+}
+
+function card(i) {
+  const open = S.open.has(i.id); const t = threadOf(i.id); const un = unreadOf(i.id);
+  const nm = i.link ? `<a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.name)}</a>` : esc(i.name);
+  const sym = i.section === "missing" ? "🔴 " : i.section === "unknown" ? "⚫ " : "";
+  const name = sym + (i.bold ? `<strong>${nm}</strong>` : nm);
+  const k = secOf(i);
+  let meta = "";
+  if (i.origin === "manual") meta = i.due ? `Due ${esc(i.due)}` : "";
+  else if (i.section === "todo") meta = i.reminder ? `<span class="chip">Study reminder</span> ${esc(i.due)}` : (i.due ? `Due ${esc(i.due)} ${esc(i.tag)}` : "No due date");
+  else meta = i.due ? `Due ${esc(i.due)}` : "";
+  const showCls = i.cls && (k === "todo" || S.review);
+  const label = open ? "Hide" : (t.length ? `💬 ${t.length} message${t.length === 1 ? "" : "s"}` : (MODE === "kid" ? "💬 Reply" : "💬 Open"));
+  const rev = MODE === "parent" && needsReview(i.id) ? ` <span class="chip" style="background:var(--miss-soft);color:var(--miss)">Needs review</span>` : "";
+  return `<article class="card ${i.section}" id="card-${sid(i.id)}">
+    ${showCls ? `<div class="cls">${esc(i.cls)}</div>` : ""}
+    <div class="name">${name}</div>
+    ${meta ? `<div class="meta">${meta}${rev}</div>` : (rev ? `<div class="meta">${rev}</div>` : "")}
+    ${i.detail ? `<div class="detail">${br(i.detail)}</div>` : ""}
+    <button class="toggle" data-act="toggle" data-id="${esc(i.id)}" aria-expanded="${open}">${label}${un ? '<span class="udot" aria-label="new"></span>' : ""}</button>
+    ${open ? threadView(i, t) : ""}
+  </article>`;
+}
+
+function whoLabel(a) { return a === "parent" ? (MODE === "kid" ? "Mom" : "You") : a === "kyan" ? "Kyan" : "Mckinley"; }
+function statusLine(m) {
+  if (MODE === "parent") return `Status: ${esc(m.status)}${m.body ? ` — “${esc(m.body)}”` : ""}`;
+  return ({ "student says done": "Noted: you said it's done", "I confirm done": "Confirmed done", "plan note": "Plan noted", "status note": "Noted",
+    "settled: done": "Settled: done", "excused": "Excused", "no count": "No count" }[m.status] || esc(m.status)) + (m.body ? `: “${esc(m.body)}”` : "");
+}
+function msgView(m) {
+  if (m.kind === "status") return `<div class="msg status">✔ ${statusLine(m)}<span class="who">— ${whoLabel(m.author)}, ${when(m.created_at)}</span></div>`;
+  const cls = m.author === "parent" ? "parent" : "kid";
+  const hasClip = m.audio_path || m.has_audio;
+  let clip = "";
+  if (hasClip) {
+    clip = MODE === "parent" ? `<audio controls preload="none" id="clip-${m.id}"></audio>` : `<div class="tx">🎙 Voice reply sent</div>`;
+    clip += `<div class="tx">Transcript: ${m.transcript ? esc(m.transcript) : "<em>no transcript</em>"}</div>`;
+  }
+  return `<div class="msg ${cls}"><span class="who">${whoLabel(m.author)} · ${when(m.created_at)}</span>${m.body ? br(m.body) : ""}${clip}</div>`;
+}
+
+function threadView(i, t) {
+  const msgs = t.length ? t.map(msgView).join("") : `<p class="empty">No messages yet.</p>`;
+  return `<div class="thread">${msgs}${MODE === "kid" ? kidComposer(i) : parentComposer(i)}</div>`;
+}
+
+function kidComposer(i) {
+  const id = i.id, k = sid(id), R = S.rec && S.rec.id === id ? S.rec : null;
+  const canRec = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+  const mic = S.micMsg[id] ? `<div class="warn">${esc(S.micMsg[id])}</div>` : "";
+  let recUi = "";
+  if (R && R.state === "recording") recUi = `<div class="row"><button class="btn recording" data-act="recstop">■ Stop <span id="rectime">0:00</span></button></div>
+      <div class="tx" id="reclive">${R.sr ? "Listening…" : "Recording (no transcript in this browser)"}</div>`;
+  else if (R && R.state === "stopping") recUi = `<div class="tx">Finishing…</div>`;
+  else if (R && (R.state === "ready" || R.state === "sending")) recUi = `<audio controls src="${R.url}"></audio>
+      <div class="tx">Transcript: ${R.transcript ? esc(R.transcript) : "<em>no transcript</em>"}</div>
+      <div class="row"><button class="btn" data-act="recsend" ${R.state === "sending" ? "disabled" : ""}>${R.state === "sending" ? "Sending…" : "Send recording"}</button>
+      <button class="btn ghost" data-act="recdiscard" ${R.state === "sending" ? "disabled" : ""}>Discard</button></div>`;
+  const busy = !!S.rec && !R;
+  return `<div class="composer">
+    <label class="f" for="d-${k}">Reply as ${esc(S.student)}</label>
+    <textarea id="d-${k}" data-draft="${esc(id)}" placeholder="Type a reply…">${esc(S.drafts[id] || "")}</textarea>
+    ${recUi || `<div class="row"><button class="btn" data-act="send" data-id="${esc(id)}">Send</button>${canRec ? `<button class="btn rec" data-act="rec" data-id="${esc(id)}" ${busy ? "disabled" : ""}>🎙 Record</button>` : ""}</div>`}
+    ${canRec ? "" : `<div class="tx">Recording isn't available in this browser. Typing works.</div>`}
+    ${mic}</div>`;
+}
+
+function parentComposer(i) {
+  const id = i.id, k = sid(id);
+  let html = `<div class="composer"><label class="f" for="d-${k}">Message to ${esc(i.student)}</label>
+    <textarea id="d-${k}" data-draft="${esc(id)}" placeholder="What's expected…">${esc(S.drafts[id] || "")}</textarea>
+    <div class="row"><button class="btn" data-act="pmsg" data-id="${esc(id)}">Send message</button></div></div>`;
+  if (i.origin === "tracker") {
+    const opts = STATUSES.filter(s => s !== "settled: done" || i.section === "followup");
+    const cur = S.statusSel[id] || "";
+    const lr = lastReply(id);
+    const pre = S.noteText[id] ?? (lr ? (lr.body || lr.transcript || "") : "");
+    html += `<div class="statusbox"><label class="f" for="s-${k}">Set a status${lr && needsReview(id) ? " (answers the latest reply)" : ""}</label>
+      <select id="s-${k}" data-statussel="${esc(id)}"><option value="">Choose…</option>${opts.map(s => `<option ${s === cur ? "selected" : ""}>${esc(s)}</option>`).join("")}</select>
+      ${NOTE_STATUSES.includes(cur) ? `<label class="f" for="n-${k}">Note (the student's words)<textarea id="n-${k}" data-notetext="${esc(id)}">${esc(pre)}</textarea></label>` : ""}
+      <div class="row"><button class="btn ghost" data-act="pstatus" data-id="${esc(id)}" ${cur ? "" : "disabled"}>Save status</button></div></div>`;
+  } else {
+    if (S.editing === id) {
+      html += `<div class="form statusbox"><label class="f">Title<input type="text" id="et-${k}" value="${esc(i.name)}"></label>
+        <label class="f">Due date (optional)<input type="date" id="ed-${k}" value="${/^\d{4}-\d\d-\d\d$/.test(i.sort) ? esc(i.sort) : ""}"></label>
+        <label class="f">Details (optional)<textarea id="ex-${k}">${esc(i.detail)}</textarea></label>
+        <div class="row"><button class="btn" data-act="saveitem" data-id="${esc(id)}">Save</button><button class="btn ghost" data-act="canceledit">Cancel</button></div></div>`;
+    } else {
+      html += `<div class="row statusbox"><button class="btn ghost small" data-act="edititem" data-id="${esc(id)}">Edit</button>
+        <button class="btn ghost small" data-act="archive" data-id="${esc(id)}">Archive</button></div>`;
+    }
+  }
+  return html;
+}
+
+function addForm(st, k) {
+  if (!S.adding) return `<div class="row" style="margin-bottom:10px"><button class="btn ghost" data-act="addopen">+ Add an item</button></div>`;
+  return `<div class="card ${k}" style="margin-bottom:12px"><h2>New ${k === "college" ? "College Apps" : "Other"} item for ${esc(st)}</h2>
+    <div class="form"><label class="f">Title<input type="text" id="nt"></label>
+    <label class="f">Due date (optional)<input type="date" id="nd"></label>
+    <label class="f">Details (optional)<textarea id="nx"></textarea></label>
+    <div class="row"><button class="btn" data-act="additem">Add</button><button class="btn ghost" data-act="addcancel">Cancel</button></div></div></div>`;
+}
+
+// ---------- recording ----------
+async function startRec(id) {
+  if (S.rec) return;
+  S.micMsg[id] = "";
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder)) {
+    S.micMsg[id] = "Recording isn't available in this browser. You can still type your reply."; render(); return;
+  }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) {
+    S.micMsg[id] = (e && (e.name === "NotAllowedError" || e.name === "SecurityError"))
+      ? "The microphone is blocked. Allow it in your browser's settings to record — or just type your reply."
+      : "Couldn't start the microphone. You can still type your reply.";
+    render(); return;
+  }
+  const type = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"].find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || "";
+  let mr;
+  try { mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined); }
+  catch (e) { stream.getTracks().forEach(t => t.stop()); S.micMsg[id] = "Couldn't start recording. You can still type your reply."; render(); return; }
+  const R = { id, mr, stream, chunks: [], start: Date.now(), state: "recording", sr: null, done: "", finals: "", interim: "", srEnded: true };
+  mr.ondataavailable = e => { if (e.data && e.data.size) R.chunks.push(e.data); };
+  mr.onstop = () => { R.mrStopped = true; finishRec(R); };
+  stream.getAudioTracks().forEach(t => t.addEventListener("ended", () => { if (R.state === "recording") stopRec(); }));
+  mr.start(1000);
+  // Live transcript from the browser, where it can. Skipped on iPhone/iPad, where running it beside the
+  // recorder can silence the recording; those clips save with "no transcript".
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SR && !IS_IOS) {
+    try {
+      const r = new SR(); r.lang = "en-US"; r.continuous = true; r.interimResults = true;
+      r.onresult = e => { let fin = "", int = ""; for (let k = 0; k < e.results.length; k++) { const x = e.results[k]; if (x.isFinal) fin += x[0].transcript + " "; else int += x[0].transcript; } R.finals = fin; R.interim = int; live_(); };
+      r.onerror = e => { if (["not-allowed", "service-not-allowed", "audio-capture", "network"].includes(e.error)) R.srFailed = true; };
+      r.onend = () => {
+        R.done += R.finals; R.finals = ""; R.interim = "";
+        if (R.state === "recording" && !R.srFailed) { try { r.start(); return; } catch (e) {} }
+        R.srEnded = true; finishRec(R);
+      };
+      r.start(); R.sr = r; R.srEnded = false;
+    } catch (e) { R.sr = null; R.srEnded = true; }
+  }
+  S.rec = R; render();
+  R.timer = setInterval(() => {
+    const s = Math.floor((Date.now() - R.start) / 1000);
+    const el = document.getElementById("rectime"); if (el) el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    if (s >= 300) stopRec();
+  }, 500);
+}
+function live_() {
+  const R = S.rec; if (!R) return; const el = document.getElementById("reclive");
+  if (el) el.textContent = (R.done + R.finals + R.interim).trim() || "Listening…";
+}
+function stopRec() {
+  const R = S.rec; if (!R || R.state !== "recording") return;
+  R.state = "stopping"; clearInterval(R.timer);
+  try { R.mr.stop(); } catch (e) { R.mrStopped = true; }
+  R.stream.getTracks().forEach(t => t.stop());
+  if (R.sr) { try { R.sr.stop(); } catch (e) { R.srEnded = true; } setTimeout(() => { R.srEnded = true; finishRec(R); }, 1500); }
+  render();
+}
+function finishRec(R) {
+  if (R.state !== "stopping" || !R.mrStopped || !R.srEnded) return;
+  const type = (R.mr.mimeType || (R.chunks[0] && R.chunks[0].type) || "audio/webm");
+  R.blob = new Blob(R.chunks, { type });
+  R.url = URL.createObjectURL(R.blob);
+  R.transcript = (R.done + R.finals).trim() || null;
+  R.state = "ready"; render();
+}
+function discardRec() { const R = S.rec; if (!R) return; if (R.url) URL.revokeObjectURL(R.url); S.rec = null; render(); }
+async function sendRec() {
+  const R = S.rec; if (!R || R.state !== "ready") return;
+  if (!R.blob || !R.blob.size) { notice("That recording was empty. Try again, or type your reply."); discardRec(); return; }
+  R.state = "sending"; render();
+  try {
+    const res = await fetch(`${SB_URL}/functions/v1/hub-voice`, { method: "POST", body: R.blob,
+      headers: { "content-type": R.blob.type || "audio/webm", "x-family-token": TOKEN, "x-item-id": R.id, "apikey": SB_KEY } });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || !j.path) throw new Error(j.error || `upload failed (${res.status})`);
+    const body = (S.drafts[R.id] || "").trim();
+    const { error } = await sb.rpc("kid_reply", { p_token: TOKEN, p_item_id: R.id, p_author: S.student.toLowerCase(), p_body: body || null, p_audio_path: j.path, p_transcript: R.transcript });
+    if (error) throw new Error(error.message);
+    S.drafts[R.id] = ""; discardRec(); S.notice = "Sent."; await load();
+  } catch (e) { R.state = "ready"; notice("Couldn't send the recording: " + (e.message || e) + ". You can try again or type your reply."); }
+}
+
+// ---------- actions ----------
+async function act(a, el) {
+  const id = el.dataset.id; S.notice = S.notice && a === "dismiss" ? "" : S.notice;
+  switch (a) {
+    case "dismiss": S.notice = ""; render(); break;
+    case "refresh": S.notice = ""; await load(); break;
+    case "sw": if (S.rec) { notice("Finish or discard the recording first."); return; } S.student = el.dataset.st; ls.set("hub-student", S.student); S.adding = false; S.editing = null; render(); break;
+    case "sec": S.section = el.dataset.sec; S.adding = false; render(); break;
+    case "review": S.review = !S.review; render(); break;
+    case "toggle":
+      if (S.open.has(id)) S.open.delete(id); else { S.open.add(id); markRead(id); if (MODE === "parent") loadClips(); }
+      render(); break;
+    case "send": {
+      const body = (S.drafts[id] || "").trim(); if (!body) { notice("Type a reply first, or record one."); return; }
+      el.disabled = true;
+      const { error } = await sb.rpc("kid_reply", { p_token: TOKEN, p_item_id: id, p_author: S.student.toLowerCase(), p_body: body });
+      if (error) { notice("Couldn't send: " + error.message); return; }
+      S.drafts[id] = ""; S.notice = "Sent."; await load(); break;
+    }
+    case "rec": startRec(id); break;
+    case "recstop": stopRec(); break;
+    case "recdiscard": discardRec(); break;
+    case "recsend": sendRec(); break;
+    case "pmsg": {
+      const body = (S.drafts[id] || "").trim(); if (!body) { notice("Type a message first."); return; }
+      el.disabled = true;
+      const { error } = await sb.from("messages").insert({ item_id: id, author: "parent", kind: "message", body });
+      if (error) { notice("Couldn't send: " + error.message); return; }
+      S.drafts[id] = ""; S.notice = "Message sent."; await load(); break;
+    }
+    case "pstatus": {
+      const status = S.statusSel[id]; if (!status) return;
+      const lr = lastReply(id);
+      let body = null;
+      if (NOTE_STATUSES.includes(status)) {
+        body = (S.noteText[id] ?? (lr ? (lr.body || lr.transcript || "") : "")).trim();
+        if (!body) { notice("A note needs the student's words."); return; }
+      }
+      el.disabled = true;
+      const { error } = await sb.from("messages").insert({ item_id: id, author: "parent", kind: "status", status, body,
+        reply_to: lr && needsReview(id) ? lr.id : null });
+      if (error) { notice("Couldn't save the status: " + error.message); return; }
+      delete S.statusSel[id]; delete S.noteText[id]; S.notice = `Status saved: ${status}.`; await load(); break;
+    }
+    case "copyledger": await copyLedger(); break;
+    case "markcopied": await markCopied(S.fallback.ids); S.fallback = null; render(); break;
+    case "cancelcopy": S.fallback = null; render(); break;
+    case "addopen": S.adding = true; render(); break;
+    case "addcancel": S.adding = false; render(); break;
+    case "additem": {
+      const name = document.getElementById("nt").value.trim(); const d = document.getElementById("nd").value; const detail = document.getElementById("nx").value.trim();
+      if (!name) { notice("Give the item a title."); return; }
+      const { error } = await sb.from("items").insert({ student: S.student, section: S.section, origin: "manual", name, due: dueText(d), sort: d || "~", detail });
+      if (error) { notice("Couldn't add: " + error.message); return; }
+      S.adding = false; S.notice = "Added."; await load(); break;
+    }
+    case "edititem": S.editing = id; render(); break;
+    case "canceledit": S.editing = null; render(); break;
+    case "saveitem": {
+      const k = sid(id); const name = document.getElementById("et-" + k).value.trim(); const d = document.getElementById("ed-" + k).value; const detail = document.getElementById("ex-" + k).value.trim();
+      if (!name) { notice("The title can't be empty."); return; }
+      const { error } = await sb.from("items").update({ name, due: dueText(d), sort: d || "~", detail }).eq("id", id);
+      if (error) { notice("Couldn't save: " + error.message); return; }
+      S.editing = null; S.notice = "Saved."; await load(); break;
+    }
+    case "archive": {
+      if (!confirm("Archive this item? It disappears from both views.")) return;
+      const { error } = await sb.from("items").update({ archived_at: new Date().toISOString() }).eq("id", id);
+      if (error) { notice("Couldn't archive: " + error.message); return; }
+      S.open.delete(id); S.notice = "Archived."; await load(); break;
+    }
+    case "signin": {
+      const email = document.getElementById("email").value.trim();
+      const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: SITE } });
+      notice(error ? "Couldn't send the link: " + error.message : "Check your email for the sign-in link. Open it on this device.");
+      break;
+    }
+    case "signout": await sb.auth.signOut(); S.items = []; S.msgs = []; S.phase = "signin"; render(); break;
+  }
+}
+
+async function copyLedger() {
+  const items = byId(); const pending = ledgerPending(items, S.msgs);
+  if (!pending.length) return;
+  const text = ledgerText(items, pending, new Date());
+  const ids = pending.map(m => m.id);
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) { S.fallback = { text, ids }; render(); const p = document.getElementById("fbtext"); if (p) { const r = document.createRange(); r.selectNodeContents(p); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } return; }
+  await markCopied(ids);
+  notice(`Copied ${ids.length} line${ids.length === 1 ? "" : "s"} — paste into Option 1's <new_info>.`);
+}
+async function markCopied(ids) {
+  const t = new Date().toISOString();
+  const { error } = await sb.from("messages").update({ copied_at: t }).in("id", ids);
+  if (error) { S.notice = "Copied, but couldn't mark them as copied: " + error.message; return; }
+  S.msgs.forEach(m => { if (ids.includes(m.id)) m.copied_at = t; });
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  e.preventDefault(); act(b.dataset.act, b);
+});
+document.addEventListener("input", e => {
+  const t = e.target;
+  if (t.dataset.draft !== undefined) S.drafts[t.dataset.draft] = t.value;
+  if (t.dataset.notetext !== undefined) S.noteText[t.dataset.notetext] = t.value;
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.statussel !== undefined) { S.statusSel[t.dataset.statussel] = t.value; render(); }
+});
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && S.phase === "ready" && !S.rec) load(); });
+
+// ---------- start ----------
+(async () => {
+  if (MODE === "kid") { await load(); return; }
+  const { data } = await sb.auth.getSession();
+  S.session = data.session;
+  sb.auth.onAuthStateChange((ev, session) => {
+    const had = !!S.session; S.session = session;
+    if (session && !had) { S.phase = "loading"; render(); load(); }
+    if (!session && had) { S.phase = "signin"; render(); }
+  });
+  if (S.session) await load(); else { S.phase = "signin"; render(); }
+})();
+</script>
+</body>
+</html>
