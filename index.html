@@ -120,6 +120,8 @@ p{margin:0}
 .msg.editing textarea{margin:4px 0 6px}
 .name a.itemlink{text-decoration:underline;text-underline-offset:3px}
 .linktag{display:inline-block;font-size:.72rem;font-weight:700;padding:1px 7px;border-radius:999px;border:1px solid var(--accent);color:var(--accent);text-decoration:none;white-space:nowrap;vertical-align:2px}
+.badge.fu{background:var(--fu-soft);color:var(--fu)}
+.backbtn{align-self:flex-start;margin-top:4px;font-size:.82rem}
 .moveto{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .mlabel-always{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .moveto select,.moveto input{font-size:.88rem;padding:7px 8px}
@@ -282,6 +284,8 @@ const rank = (st, c) => { const i = (CLASS_ORDER[st] || []).indexOf(c); return i
 const secOf = i => {
   if (i.origin === "manual") return i.section;
   if (i.section === "todo") return "todo";
+  // Mom moved it back to New & Outstanding: it stays there until the student's next reply on it
+  if (i.place === "new" && !threadOf(i.id).some(m => m.kind === "reply" && new Date(m.created_at) > new Date(i.place_at))) return "new";
   if (i.section === "followup" || i.hold || threadOf(i.id).some(m => m.kind === "reply")) return "follow";
   return "new";
 };
@@ -327,12 +331,14 @@ async function load() {
       if (e) { S.phase = /invalid family link/i.test(e.message || "") ? "badlink" : "error"; S.err = e.message || ""; render(); return; }
       S.items = a.data || []; S.msgs = b.data || [];
     } else {
-      const [a, b, h] = await Promise.all([sb.from("items").select("*"), sb.from("messages").select("*").order("created_at"), sb.from("item_holds").select("*")]);
-      const e = a.error || b.error || h.error;
+      const [a, b, h, pl] = await Promise.all([sb.from("items").select("*"), sb.from("messages").select("*").order("created_at"), sb.from("item_holds").select("*"), sb.from("item_place").select("*")]);
+      const e = a.error || b.error || h.error || pl.error;
       if (e) { S.phase = "error"; S.err = e.message || ""; render(); return; }
       if (!a.data.length) { S.phase = "notparent"; render(); return; }
       const holds = {}; (h.data || []).forEach(x => { holds[x.item_id] = x; });
-      a.data.forEach(i => { const x = holds[i.id]; i.hold = x ? x.reason : null; i.hold_at = x ? x.set_at : null; });
+      const places = {}; (pl.data || []).forEach(x => { places[x.item_id] = x; });
+      a.data.forEach(i => { const x = holds[i.id]; i.hold = x ? x.reason : null; i.hold_at = x ? x.set_at : null;
+        const q = places[i.id]; i.place = q ? q.place : null; i.place_at = q ? q.set_at : null; });
       S.items = a.data; S.msgs = b.data;
     }
     S.phase = "ready";
@@ -506,7 +512,8 @@ function nameHtml(i) {
   return (i.bold ? `<strong>${nm}</strong>` : nm) + " " + tag;
 }
 function stateBadge(i) {
-  return i.section === "missing" ? `<span class="badge miss">🔴 Missing</span>` : i.section === "unknown" ? `<span class="badge unk">⚫ Unknown</span>` : "";
+  return i.section === "missing" ? `<span class="badge miss">🔴 Missing</span>` : i.section === "unknown" ? `<span class="badge unk">⚫ Unknown</span>`
+    : i.section === "followup" ? `<span class="badge fu">🔁 Tracker follow-up</span>` : "";
 }
 function itemCell(i) {
   const rev = MODE === "parent" && needsReview(i.id) ? `<span class="chip rev">Needs review</span>` : "";
@@ -534,7 +541,8 @@ function autoNext(i) {
 function nextCell(i) {
   const chosen = i.hold; const shown = chosen ? (MODE === "kid" && chosen === "Awaiting response" ? "Waiting for your reply" : chosen) : autoNext(i);
   let html = `<div class="c-next"><span class="mlabel">Next step</span><div class="next${chosen ? "" : " auto"}">${shown ? esc(shown) : "—"}</div>`;
-  if (MODE === "parent") html += nextPicker(i, chosen ? "Change…" : "Set next step…");
+  if (MODE === "parent") html += nextPicker(i, chosen ? "Change…" : "Set next step…")
+    + `<button class="btn ghost small backbtn" data-act="tonew" data-id="${esc(i.id)}">↩ Move back to New &amp; Outstanding</button>`;
   return html + `</div>`;
 }
 // the Next step dropdown; on a New & Outstanding row, picking one moves the item to Follow Up
@@ -785,6 +793,15 @@ async function act(a, el) {
       delete S.statusSel[id]; delete S.noteText[id]; delete S.noteBy[id]; S.notice = `Status saved: ${status}.`; await load(); break;
     }
     case "copyledger": await copyLedger(); break;
+    case "tonew": {
+      el.disabled = true;
+      // clears its Next step and pins it to New & Outstanding until the student's next reply
+      const d = await sb.from("item_holds").delete().eq("item_id", id);
+      const u = await sb.from("item_place").upsert({ item_id: id, place: "new", set_at: new Date().toISOString() });
+      const err = d.error || u.error;
+      if (err) { el.disabled = false; notice("Couldn't move it: " + err.message); return; }
+      S.notice = "Moved back to New & Outstanding."; await load(); break;
+    }
     case "msgedit": { const m = S.msgs.find(x => x.id === id); if (!m) return; S.editMsg = id; S.editText = m.body || ""; render(); break; }
     case "msgcancel": S.editMsg = null; S.editText = ""; render(); break;
     case "msgsave": {
@@ -807,8 +824,9 @@ async function act(a, el) {
       const sel = S.holdSel[id]; const reason = (sel === "Other…" ? (S.holdText[id] || "") : sel || "").trim();
       if (!reason) { notice("Choose or type a reason first."); return; }
       el.disabled = true;
+      await sb.from("item_place").delete().eq("item_id", id);
       const { error } = await sb.from("item_holds").upsert({ item_id: id, reason, set_at: new Date().toISOString() });
-      if (error) { el.disabled = false; notice("Couldn't put it on hold: " + error.message); return; }
+      if (error) { el.disabled = false; notice("Couldn't save the next step: " + error.message); return; }
       { const it = S.items.find(x => x.id === id); const wasNew = it && secOf(it) === "new";
         delete S.holdSel[id]; delete S.holdText[id]; S.notice = wasNew ? `Moved to Follow Up · Next step: ${reason}.` : `Next step: ${reason}.`; }
       await load(); break;
@@ -858,6 +876,7 @@ async function act(a, el) {
 
 async function setNext(id, v) {
   delete S.holdSel[id]; delete S.holdText[id];
+  if (v !== "__clear") await sb.from("item_place").delete().eq("item_id", id);
   const { error } = v === "__clear"
     ? await sb.from("item_holds").delete().eq("item_id", id)
     : await sb.from("item_holds").upsert({ item_id: id, reason: v, set_at: new Date().toISOString() });
