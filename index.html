@@ -702,7 +702,8 @@ function parentComposer(i) {
     <textarea id="d-${k}" data-draft="${esc(id)}" rows="2" aria-label="${sp === "me" ? `Message to ${esc(kid)}` : `What ${esc(kid)} told you`}" placeholder="${sp === "me" ? "What's expected…" : `What ${esc(kid)} said, in their words…`}">${esc(S.drafts[id] || "")}</textarea>
     <div class="row"><button class="btn" data-act="pmsg" data-id="${esc(id)}">${sp === "me" ? "Send message" : `Save as ${esc(kid)}'s reply`}</button></div></div>`;
   if (i.origin === "tracker") {
-    const opts = STATUSES.filter(s => s !== "settled: done" || i.section === "followup");
+    // "resolved" (settled: done) closes any tracker item — rules FR-OUTCOME / AH2, Oct 15
+    const opts = STATUSES;
     const cur = S.statusSel[id] || "";
     const lr = lastReply(id);
     const need = NOTE_STATUSES.includes(cur);
