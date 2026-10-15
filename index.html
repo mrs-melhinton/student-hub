@@ -67,6 +67,8 @@ p{margin:0}
 .pick label{display:flex;gap:10px;align-items:flex-start;font-size:.98rem;padding:6px 8px;border-radius:8px;background:var(--bg);cursor:pointer;min-height:44px}
 .pick input{width:22px;height:22px;flex:none;margin-top:2px;accent-color:var(--accent)}
 .thead{display:none}
+.again{gap:6px}
+.again-row{justify-content:space-between;border-top:1px solid var(--line);padding-top:6px}
 .stickybox{position:sticky;top:0;z-index:20;background:var(--card);border:2px solid var(--accent);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
 .sb-h{font-weight:700;font-size:1rem}
 .sb-row,.composer.inline{display:flex;flex-direction:row;gap:8px;align-items:flex-end}
@@ -219,7 +221,7 @@ const ls = {
 const S = {
   phase: "loading", items: [], msgs: [], student: STUDENTS.includes(ls.get("hub-student")) ? ls.get("hub-student") : "Kyan",
   open: new Set(), review: false, drafts: {}, notice: "", general: "", applySel: {},
-  statusSel: {}, noteText: {}, noteBy: {}, speaker: {}, editing: null, adding: null, clipUrls: {}, fallback: null, session: null, err: ""
+  again: false, statusSel: {}, noteText: {}, noteBy: {}, speaker: {}, editing: null, adding: null, clipUrls: {}, fallback: null, session: null, err: ""
 };
 const MIC_TIP = "Tip: tap the 🎤 on your keyboard to talk instead of type.";
 
@@ -351,10 +353,12 @@ function view() {
     const nRev = itemsOf(st).filter(i => needsReview(i.id)).length;
     const pend = ledgerPending(byId(), S.msgs).length;
     bar = `<div class="bar"><button class="filter" data-act="review" aria-pressed="${S.review}">Needs my review <span class="count">${nRev}</span></button>
-      <button class="btn small" data-act="copyledger" ${pend ? "" : "disabled"}>Copy for ledger (${pend})</button></div>`;
+      <button class="btn small" data-act="copyledger" ${pend ? "" : "disabled"}>Copy for ledger (${pend})</button>
+      ${copiedBatches().length ? `<button class="btn ghost small" data-act="againopen" aria-expanded="${S.again}">↺ Copy again</button>` : ""}</div>
+      ${S.again ? againView() : ""}`;
   }
   const fb = S.fallback ? `<div class="warn">Your browser blocked copying. Select the text below and copy it, then tap "I copied it".
-    <pre id="fbtext">${esc(S.fallback.text)}</pre><div class="row" style="margin-top:8px"><button class="btn small" data-act="markcopied">I copied it — mark as copied</button><button class="btn ghost small" data-act="cancelcopy">Cancel</button></div></div>` : "";
+    <pre id="fbtext">${esc(S.fallback.text)}</pre><div class="row" style="margin-top:8px">${S.fallback.ids ? `<button class="btn small" data-act="markcopied">I copied it — mark as copied</button>` : `<button class="btn small" data-act="cancelcopy">Done</button>`}<button class="btn ghost small" data-act="cancelcopy">Cancel</button></div></div>` : "";
   const pv = PREVIEW ? `<div class="warn"><strong>Preview</strong> — this is what Kyan and Mckinley see. Replies are off, and nothing is marked as read.</div>` : "";
   const top = MODE === "kid" ? generalBox(st) : sortBox(st);
   return head + pv + sw + bar + `</header>` + nt + fb + `<main class="main">${top}${allView(st)}</main>`;
@@ -634,6 +638,8 @@ async function act(a, el) {
       delete S.statusSel[id]; delete S.noteText[id]; delete S.noteBy[id]; S.notice = `Status saved: ${status}.`; await load(); break;
     }
     case "copyledger": await copyLedger(); break;
+    case "againopen": S.again = !S.again; render(); break;
+    case "copyagain": await copyAgain(el.dataset.at); break;
     case "markcopied": await markCopied(S.fallback.ids); S.fallback = null; render(); break;
     case "cancelcopy": S.fallback = null; render(); break;
     case "addopen": S.adding = el.dataset.sec; render(); break;
@@ -679,6 +685,27 @@ async function copyLedger() {
   catch (e) { S.fallback = { text, ids }; render(); const p = document.getElementById("fbtext"); if (p) { const r = document.createRange(); r.selectNodeContents(p); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } return; }
   await markCopied(ids);
   notice(`Copied ${ids.length} line${ids.length === 1 ? "" : "s"} — paste into Option 1's <new_info>.`);
+}
+// Copy again: rebuild a batch already copied, in the same line format. Nothing is re-marked.
+function copiedBatches() {
+  const items = byId(); const by = {};
+  S.msgs.filter(m => m.kind === "status" && m.copied_at && items[m.item_id] && items[m.item_id].origin === "tracker")
+    .forEach(m => { (by[m.copied_at] = by[m.copied_at] || []).push(m); });
+  return Object.keys(by).sort((a, b) => new Date(b) - new Date(a)).slice(0, 5)
+    .map(at => ({ at, msgs: by[at].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))) }));
+}
+function againView() {
+  const b = copiedBatches();
+  return `<div class="panel again"><div class="sent-h">Copy an earlier batch again (most recent first)</div>${b.map(x =>
+    `<div class="row again-row"><span>Copied ${when(x.at)} · ${x.msgs.length} line${x.msgs.length === 1 ? "" : "s"}</span>
+     <button class="btn small" data-act="copyagain" data-at="${esc(x.at)}">Copy</button></div>`).join("")}</div>`;
+}
+async function copyAgain(at) {
+  const x = copiedBatches().find(b => b.at === at); if (!x) return;
+  const text = ledgerText(byId(), x.msgs, new Date());
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) { S.fallback = { text, ids: null }; render(); const p = document.getElementById("fbtext"); if (p) { const r = document.createRange(); r.selectNodeContents(p); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } return; }
+  notice(`Copied ${x.msgs.length} line${x.msgs.length === 1 ? "" : "s"} again — paste into Option 1's <new_info>.`);
 }
 async function markCopied(ids) {
   const t = new Date().toISOString();
