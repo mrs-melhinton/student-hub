@@ -115,10 +115,13 @@ p{margin:0}
 .msgtools{float:right;display:inline-flex;gap:10px}
 .linkbtn{border:0;background:transparent;color:var(--accent);font:inherit;font-size:.78rem;font-weight:600;padding:0;cursor:pointer;text-decoration:underline}
 .msg.editing textarea{margin:4px 0 6px}
+.moveto{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.mlabel-always{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.moveto select,.moveto input{font-size:.88rem;padding:7px 8px}
 @media (min-width:900px){
   .wrap{max-width:1320px}
   .mlabel{display:none !important}
-  .thead.th-new,.card.row-new:not(.addcard){grid-template-columns:170px minmax(0,1.1fr) 120px 80px minmax(0,1.8fr)}
+  .thead.th-new,.card.row-new:not(.addcard){grid-template-columns:160px minmax(0,1.1fr) 175px 76px minmax(0,1.8fr)}
   .thead.th-follow,.card.row-follow:not(.addcard){grid-template-columns:150px minmax(0,1fr) 72px minmax(0,1.5fr) 170px minmax(0,1.3fr)}
   .card.row-follow .c-hist{border-top:0;padding-top:0;margin-top:0}
   .thead{display:grid;grid-template-columns:190px minmax(0,1.1fr) 140px minmax(0,1.6fr);column-gap:18px;padding:0 15px 6px 19px;font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
@@ -506,7 +509,7 @@ const composerFor = i => MODE === "kid" ? kidComposer(i) : parentComposer(i);
 function newRow(i) {
   const un = unreadOf(i.id);
   return `<article class="card row-new ${i.section}" id="card-${sid(i.id)}">${courseCell(i)}${itemCell(i)}
-    <div class="c-state">${stateBadge(i)}</div>${dueCell(i)}
+    <div class="c-state">${stateBadge(i)}${MODE === "parent" ? `<div class="moveto"><span class="mlabel-always">Move to Follow Up</span>${nextPicker(i, "Choose next step…")}</div>` : ""}</div>${dueCell(i)}
     <div class="c-talk thread"${un && !PREVIEW ? ` data-unread="${esc(i.id)}"` : ""}>${historyHtml(i)}${composerFor(i)}</div></article>`;
 }
 
@@ -520,14 +523,17 @@ function autoNext(i) {
 function nextCell(i) {
   const chosen = i.hold; const shown = chosen ? (MODE === "kid" && chosen === "Awaiting response" ? "Waiting for your reply" : chosen) : autoNext(i);
   let html = `<div class="c-next"><span class="mlabel">Next step</span><div class="next${chosen ? "" : " auto"}">${shown ? esc(shown) : "—"}</div>`;
-  if (MODE === "parent") {
-    const id = i.id, k = sid(id), sel = S.holdSel[id] || "";
-    html += `<select id="h-${k}" data-holdsel="${esc(id)}" aria-label="Next step for ${esc(i.name)}"><option value="">${chosen ? "Change…" : "Set next step…"}</option>${
-      [...NEXT_STEPS, "Other…"].map(r => `<option ${r === sel ? "selected" : ""}>${esc(r)}</option>`).join("")}${chosen ? `<option value="__clear">Clear (go back to automatic)</option>` : ""}</select>`;
-    if (sel === "Other…") html += `<input type="text" id="ht-${k}" data-holdtext="${esc(id)}" maxlength="200" placeholder="Next step, in a few words…" value="${esc(S.holdText[id] || "")}">
-      <button class="btn small" data-act="hold" data-id="${esc(id)}" ${(S.holdText[id] || "").trim() ? "" : "disabled"}>Save</button>`;
-  }
+  if (MODE === "parent") html += nextPicker(i, chosen ? "Change…" : "Set next step…");
   return html + `</div>`;
+}
+// the Next step dropdown; on a New & Outstanding row, picking one moves the item to Follow Up
+function nextPicker(i, prompt) {
+  const id = i.id, k = sid(id), sel = S.holdSel[id] || "";
+  let html = `<select id="h-${k}" data-holdsel="${esc(id)}" aria-label="Next step for ${esc(i.name)}"><option value="">${esc(prompt)}</option>${
+    [...NEXT_STEPS, "Other…"].map(r => `<option ${r === sel ? "selected" : ""}>${esc(r)}</option>`).join("")}${i.hold ? `<option value="__clear">Clear (go back to automatic)</option>` : ""}</select>`;
+  if (sel === "Other…") html += `<input type="text" id="ht-${k}" data-holdtext="${esc(id)}" maxlength="200" placeholder="Next step, in a few words…" value="${esc(S.holdText[id] || "")}">
+    <button class="btn small" data-act="hold" data-id="${esc(id)}" ${(S.holdText[id] || "").trim() ? "" : "disabled"}>Save</button>`;
+  return html;
 }
 function followRow(i) {
   const un = unreadOf(i.id);
@@ -792,7 +798,9 @@ async function act(a, el) {
       el.disabled = true;
       const { error } = await sb.from("item_holds").upsert({ item_id: id, reason, set_at: new Date().toISOString() });
       if (error) { el.disabled = false; notice("Couldn't put it on hold: " + error.message); return; }
-      delete S.holdSel[id]; delete S.holdText[id]; S.notice = `Next step: ${reason}.`; await load(); break;
+      { const it = S.items.find(x => x.id === id); const wasNew = it && secOf(it) === "new";
+        delete S.holdSel[id]; delete S.holdText[id]; S.notice = wasNew ? `Moved to Follow Up · Next step: ${reason}.` : `Next step: ${reason}.`; }
+      await load(); break;
     }
     case "unhold": {
       const { error } = await sb.from("item_holds").delete().eq("item_id", id);
@@ -843,7 +851,8 @@ async function setNext(id, v) {
     ? await sb.from("item_holds").delete().eq("item_id", id)
     : await sb.from("item_holds").upsert({ item_id: id, reason: v, set_at: new Date().toISOString() });
   if (error) { notice("Couldn't save the next step: " + error.message); return; }
-  S.notice = v === "__clear" ? "Next step cleared." : `Next step: ${v}.`; await load();
+  const it = S.items.find(x => x.id === id); const wasNew = it && secOf(it) === "new";
+  S.notice = v === "__clear" ? "Next step cleared." : wasNew ? `Moved to Follow Up · Next step: ${v}.` : `Next step: ${v}.`; await load();
 }
 async function copyLedger() {
   const items = byId(); const pending = ledgerPending(items, S.msgs);
