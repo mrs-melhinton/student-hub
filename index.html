@@ -121,6 +121,10 @@ p{margin:0}
 .name a.itemlink{text-decoration:underline;text-underline-offset:3px}
 .linktag{display:inline-block;font-size:.72rem;font-weight:700;padding:1px 7px;border-radius:999px;border:1px solid var(--accent);color:var(--accent);text-decoration:none;white-space:nowrap;vertical-align:2px}
 .badge.fu{background:var(--fu-soft);color:var(--fu)}
+.msg.removed{opacity:.55;border:1px dashed var(--muted)}
+.sect.sec-resolved{border-radius:16px;padding:14px 14px 16px;border:2px solid var(--line);background:var(--card)}
+.sec-resolved>.grph{font-size:1.3rem;margin:-14px -14px 0;padding:10px 16px;border-radius:13px 13px 0 0;background:var(--ok-soft);color:var(--ok)}
+.card.row-resolved{border-left-color:var(--ok);opacity:.9}
 .backbtn{align-self:flex-start;margin-top:4px;font-size:.82rem}
 .moveto{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .mlabel-always{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
@@ -130,7 +134,8 @@ p{margin:0}
   .mlabel{display:none !important}
   .thead.th-new,.card.row-new:not(.addcard){grid-template-columns:160px minmax(0,1.1fr) 175px 76px minmax(0,1.8fr)}
   .thead.th-follow,.card.row-follow:not(.addcard){grid-template-columns:150px minmax(0,1fr) 72px minmax(0,1.5fr) 170px minmax(0,1.3fr)}
-  .card.row-follow .c-hist{border-top:0;padding-top:0;margin-top:0}
+  .card.row-follow .c-hist,.card.row-resolved .c-hist{border-top:0;padding-top:0;margin-top:0}
+  .thead.th-resolved,.card.row-resolved:not(.addcard){grid-template-columns:150px minmax(0,1fr) 72px minmax(0,1.6fr) minmax(0,1.4fr)}
   .thead{display:grid;grid-template-columns:190px minmax(0,1.1fr) 140px minmax(0,1.6fr);column-gap:18px;padding:0 15px 6px 19px;font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
   .card:not(.addcard){display:grid;grid-template-columns:190px minmax(0,1.1fr) 140px minmax(0,1.6fr);column-gap:18px;row-gap:8px;align-items:start}
   .card .c-due:empty{display:block}
@@ -205,12 +210,13 @@ const CLASS_ORDER = {
   Kyan: ["Chemistry in Earth System", "Biotechnology I", "English 10", "Pre-Calculus", "World History 10"]
 };
 // To Do is hidden for now (its items stay in the database). Missing & Unknown and On hold fold into these two.
-const SECTIONS = { Mckinley: ["new", "follow", "college", "other"], Kyan: ["new", "follow", "other"] };
-const SEC_LABEL = { todo: "📝 To Do", new: "🆕 New & Outstanding", follow: "🔁 Follow Up", college: "🎓 College Apps", other: "🗂 Other" };
+const SECTIONS = { Mckinley: ["new", "follow", "college", "other", "resolved"], Kyan: ["new", "follow", "other", "resolved"] };
+const SEC_LABEL = { todo: "📝 To Do", new: "🆕 New & Outstanding", follow: "🔁 Follow Up", college: "🎓 College Apps", other: "🗂 Other", resolved: "✅ Resolved" };
 const SEC_HEADS = {
   new: ["Course", "Assignment", "Status", "Due", "Messages"],
   follow: ["Course", "Assignment", "Due", "Message history", "Next step", "Reply"],
-  college: ["Course", "Assignment", "Due", "Messages"], other: ["Course", "Assignment", "Due", "Messages"]
+  college: ["Course", "Assignment", "Due", "Messages"], other: ["Course", "Assignment", "Due", "Messages"],
+  resolved: ["Course", "Assignment", "Due", "Message history", "Status / reply"]
 };
 const NEXT_STEPS = ["Awaiting turn in", "Awaiting teacher", "Awaiting Skyward", "Awaiting Canvas", "Awaiting response"];
 const STATUSES = ["student says done", "I confirm done", "plan note", "status note", "settled: done", "excused", "no count"];
@@ -284,6 +290,8 @@ const rank = (st, c) => { const i = (CLASS_ORDER[st] || []).indexOf(c); return i
 const secOf = i => {
   if (i.origin === "manual") return i.section;
   if (i.section === "todo") return "todo";
+  // excused: off the kids' page, and in my Resolved section until the hub refresh takes it off
+  if (lastStatus(i.id) === "excused") return "resolved";
   // Mom moved it back to New & Outstanding: it stays there until the student's next reply on it
   if (i.place === "new" && !threadOf(i.id).some(m => m.kind === "reply" && new Date(m.created_at) > new Date(i.place_at))) return "new";
   if (i.section === "followup" || i.hold || threadOf(i.id).some(m => m.kind === "reply")) return "follow";
@@ -301,6 +309,8 @@ const bySort = (a, b) => String(a.sort).localeCompare(String(b.sort)) || rank(a.
 const byCourse = (a, b) => rank(a.student, a.cls) - rank(b.student, b.cls) || String(a.cls || "").localeCompare(String(b.cls || "")) || String(a.sort).localeCompare(String(b.sort)) || byName(a, b);
 const live = i => i.active !== false && !i.archived_at;
 const threadOf = id => S.msgs.filter(m => m.item_id === id);
+// messages that count for New tags, review, and the Next step hint (removed ones don't)
+const liveThread = id => threadOf(id).filter(m => !m.removed_at);
 // replies about several items (not tied to one item)
 const generalOf = st => S.msgs.filter(m => !m.item_id && m.kind === "reply" && m.student === st);
 const unsortedOf = st => generalOf(st).filter(m => !m.sorted_at);
@@ -488,15 +498,16 @@ function allView(st) {
     .join(`<div class="secdivider" role="separator" aria-hidden="true"></div>`);
 }
 function sectionBlock(st, k, list, withAdd) {
-  const handKept = k === "college" || k === "other";
-  const add = withAdd && MODE === "parent" && !S.review && handKept;
+  const handKept = k === "college" || k === "other" || k === "resolved";
+  const add = withAdd && MODE === "parent" && !S.review && (k === "college" || k === "other");
   if (!list.length && !add && (handKept || S.review)) return "";
   const blurb = { new: MODE === "kid" ? "Missing or unknown — reply to tell Mom where it stands." : "Missing or unknown, with no reply from the student yet.",
-    follow: MODE === "kid" ? "You've replied. The Next step shows what it's waiting on." : "The student has replied, or there's a Next step. Track it to the finish." }[k];
+    follow: MODE === "kid" ? "You've replied. The Next step shows what it's waiting on." : "The student has replied, or there's a Next step. Track it to the finish.",
+    resolved: "Excused — off the student's page. Leaves here after the next hub refresh. Pick another status to bring it back." }[k];
   let html = `<section class="sect sec-${k}"><h2 class="grph">${esc(SEC_LABEL[k])} <span class="count">${list.length}</span></h2>${blurb ? `<p class="secblurb">${esc(blurb)}</p>` : ""}`;
   if (add) html += addForm(st, k);
   if (list.length) {
-    const row = k === "new" ? newRow : k === "follow" ? followRow : card;
+    const row = k === "new" ? newRow : k === "follow" ? followRow : k === "resolved" ? resolvedRow : card;
     html += `<div class="thead th-${k}" aria-hidden="true">${SEC_HEADS[k].map(h => `<span>${esc(h)}</span>`).join("")}</div>`
       + `<div class="list">${groups(k, list)[0].items.map(row).join("")}</div>`;
   } else if (!add) html += `<p class="empty">None right now.</p>`;
@@ -533,7 +544,7 @@ function newRow(i) {
 
 // Next step: the one Mom chose (kept until she changes it), else a hint from the latest message
 function autoNext(i) {
-  const t = threadOf(i.id).filter(m => m.kind !== "status"); const last = t[t.length - 1];
+  const t = liveThread(i.id).filter(m => m.kind !== "status"); const last = t[t.length - 1];
   if (!last) return "";
   if (last.author === "parent") return MODE === "kid" ? "Waiting for your reply" : "Awaiting response";
   return needsReview(i.id) ? (MODE === "kid" ? "Waiting for Mom" : "Your turn to respond") : "";
@@ -553,6 +564,11 @@ function nextPicker(i, prompt) {
   if (sel === "Other…") html += `<input type="text" id="ht-${k}" data-holdtext="${esc(id)}" maxlength="200" placeholder="Next step, in a few words…" value="${esc(S.holdText[id] || "")}">
     <button class="btn small" data-act="hold" data-id="${esc(id)}" ${(S.holdText[id] || "").trim() ? "" : "disabled"}>Save</button>`;
   return html;
+}
+function resolvedRow(i) {
+  return `<article class="card row-resolved" id="card-${sid(i.id)}">${courseCell(i)}${itemCell(i)}${dueCell(i)}
+    <div class="c-hist thread"><span class="mlabel">Message history</span>${historyHtml(i)}</div>
+    <div class="c-reply">${composerFor(i)}</div></article>`;
 }
 function followRow(i) {
   const un = unreadOf(i.id);
@@ -587,7 +603,7 @@ function groups(k, list) {
     if (und.length) out.push({ title: "Undated", items: und });
     return out;
   }
-  if (k === "new" || k === "follow") return [{ title: "", items: list.slice().sort(byCourse) }];
+  if (k === "new" || k === "follow" || k === "resolved") return [{ title: "", items: list.slice().sort(byCourse) }];
   return [{ title: "", items: list.slice().sort((a, b) => String(a.sort).localeCompare(String(b.sort)) || byName(a, b)) }];
 }
 
@@ -636,7 +652,7 @@ function msgView(m) {
   const cls = m.author === "parent" ? "parent" : "kid";
   const isNew = MODE === "kid" ? (m.author === "parent" && !m.read_by_student_at)
     : (m.kind === "reply" && m.item_id && (m.entered_by !== "parent" || m.applied_from)
-       && !threadOf(m.item_id).some(x => x.author === "parent" && x.created_at > m.created_at));
+       && !liveThread(m.item_id).some(x => x.author === "parent" && x.created_at > m.created_at));
   const hasClip = m.audio_path || m.has_audio;
   let clip = "";
   if (hasClip) {
@@ -644,6 +660,10 @@ function msgView(m) {
     clip += `<div class="tx">Transcript: ${m.transcript ? esc(m.transcript) : "<em>no transcript</em>"}</div>`;
   }
   const mine = MODE === "parent" && m.author === "parent" && m.kind === "message";
+  if (mine && m.removed_at) {
+    return `<div class="msg parent removed"><span class="who">You · ${when(m.created_at)} · <span class="edited">removed — ${esc(S.items.find(i => i.id === m.item_id)?.student || "the student")} can't see this</span>
+      <span class="msgtools"><button class="linkbtn" data-act="msgrestore" data-id="${esc(m.id)}">Restore</button></span></span>${m.body ? br(m.body) : ""}</div>`;
+  }
   const edited = m.edited_at ? ` <span class="edited">(edited)</span>` : "";
   if (mine && S.editMsg === m.id) {
     return `<div class="msg parent editing"><span class="who">Editing your message</span>
@@ -814,11 +834,16 @@ async function act(a, el) {
       S.editMsg = null; S.editText = ""; S.notice = "Message updated."; await load(); break;
     }
     case "msgdel": {
-      if (!confirm("Remove this message? The student won't see it anymore.")) return;
-      const { error } = await sb.from("messages").delete().eq("id", id).eq("author", "parent").eq("kind", "message");
+      if (!confirm("Remove this message from the student's view? You'll still see it, marked removed.")) return;
+      const { error } = await sb.from("messages").update({ removed_at: new Date().toISOString() }).eq("id", id).eq("author", "parent").eq("kind", "message");
       if (error) { notice("Couldn't remove it: " + error.message); return; }
       if (S.editMsg === id) { S.editMsg = null; S.editText = ""; }
-      S.notice = "Message removed."; await load(); break;
+      S.notice = "Removed from the student's view."; await load(); break;
+    }
+    case "msgrestore": {
+      const { error } = await sb.from("messages").update({ removed_at: null }).eq("id", id).eq("author", "parent").eq("kind", "message");
+      if (error) { notice("Couldn't restore it: " + error.message); return; }
+      S.notice = "Restored — the student can see it again."; await load(); break;
     }
     case "hold": {
       const sel = S.holdSel[id]; const reason = (sel === "Other…" ? (S.holdText[id] || "") : sel || "").trim();
