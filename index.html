@@ -67,6 +67,21 @@ p{margin:0}
 .pick label{display:flex;gap:10px;align-items:flex-start;font-size:.98rem;padding:6px 8px;border-radius:8px;background:var(--bg);cursor:pointer;min-height:44px}
 .pick input{width:22px;height:22px;flex:none;margin-top:2px;accent-color:var(--accent)}
 .thead{display:none}
+.stickybox{position:sticky;top:0;z-index:20;background:var(--card);border:2px solid var(--accent);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+.sb-h{font-weight:700;font-size:1rem}
+.sb-row,.composer.inline{display:flex;flex-direction:row;gap:8px;align-items:flex-end}
+.sb-row textarea{min-height:52px;max-height:30vh}
+.composer.inline{margin-top:4px}
+.composer.inline textarea{min-height:46px}
+.sb-row .btn,.composer.inline .btn{flex:none}
+.tgroup h3{margin-top:12px}
+.tlist{list-style:none;margin:0;padding:0;background:var(--card);border:1px solid var(--line);border-left:5px solid var(--todo);border-radius:12px}
+.tline{display:grid;grid-template-columns:1fr;gap:2px;padding:10px 14px;border-top:1px solid var(--line)}
+.tline:first-child{border-top:0}
+.t-cls{font-weight:700;font-size:1.05rem}
+.t-name{overflow-wrap:anywhere}
+.t-detail{display:block;font-size:.92rem;color:var(--muted)}
+.t-when{color:var(--muted);font-size:.95rem}
 @media (min-width:900px){
   .wrap{max-width:1180px}
   .thead{display:grid;grid-template-columns:190px minmax(0,1.1fr) 140px minmax(0,1.6fr);column-gap:18px;padding:0 15px 6px 19px;font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
@@ -74,7 +89,8 @@ p{margin:0}
   .card .c-due:empty{display:block}
   .none-cls{display:block;color:var(--muted)}
   .c-talk.thread{border-top:0;padding-top:0;margin-top:0}
-  .c-compose{grid-column:1/-1;border-top:1px solid var(--line);padding-top:10px}
+  .tline{grid-template-columns:190px minmax(0,1fr) 170px;column-gap:18px;align-items:baseline}
+  .t-when{text-align:left}
 }
 .card.missing{border-left-color:var(--miss)} .card.unknown{border-left-color:var(--unk)}
 .card.followup{border-left-color:var(--fu)} .card.todo{border-left-color:var(--todo)}
@@ -360,13 +376,13 @@ function generalBox(st) {
       : "Waiting for Mom";
     return `<div class="msg kid"><span class="who">${esc(st)} · ${when(m.created_at)}</span>${br(m.body)}<div class="tx">${state}</div></div>`;
   }).join("")}</div>` : "";
+  // the box itself stays pinned to the top of the screen while scrolling
   const box = PREVIEW
     ? `<p class="tx">Replies are turned off in preview. Here, ${esc(st)} sees a box to reply about any of the items.</p>`
-    : `<label class="f" for="general">Reply about any of these, as ${esc(st)}</label>
-      <textarea id="general" data-general="1" placeholder="e.g. Turned in the chem lab, still working on the map project…">${esc(S.general)}</textarea>
-      <div class="row"><button class="btn" data-act="gsend">Send</button></div>
-      <div class="tx">${MIC_TIP}</div>`;
-  return `<section class="panel"><h2>💬 Reply about any of these</h2><p class="muted small">One reply can cover as many items as you want. Mom will match it to the right items.</p>${box}${past}</section>`;
+    : `<div class="sb-row"><textarea id="general" data-general="1" rows="2" aria-label="Reply about any of these, as ${esc(st)}" placeholder="Reply about any of these…">${esc(S.general)}</textarea>
+      <button class="btn" data-act="gsend">Send</button></div>`;
+  return `<section class="stickybox" aria-label="Reply about any of these"><div class="sb-h">💬 Reply about any of these <span class="muted">· as ${esc(st)}</span></div>${box}</section>
+    <section class="panel"><p class="muted small">One reply can cover as many items as you want. Mom will match it to the right items. ${MIC_TIP}</p>${past}</section>`;
 }
 
 // ---------- me: replies about several items, waiting to be sorted onto items ----------
@@ -378,7 +394,7 @@ function sortBox(st) {
     <p class="muted small">Tick the items each reply is about, then tap Apply. The reply is copied onto those items, and they show "Needs review" so you can set a status.</p>
     ${list.map(g => {
       const sel = S.applySel[g.id] || new Set();
-      const checks = SECTIONS[st].map(k => {
+      const checks = SECTIONS[st].filter(k => k !== "todo").map(k => {
         const l = items.filter(i => secOf(i) === k).sort(k === "todo" ? bySort : byCourse);
         if (!l.length) return "";
         return `<fieldset class="pick"><legend>${esc(SEC_LABEL[k])}</legend>${l.map(i =>
@@ -392,9 +408,12 @@ function sortBox(st) {
     }).join("")}</section>`;
 }
 
-// ---------- one page: every section, as one table ----------
+// ---------- one page: every section ----------
+// To Do is a plain list laid out like the tracker summary (no replies there).
+// The other sections are a table with messages and an always-open reply box.
 function allView(st) {
-  const shown = itemsOf(st).filter(i => !S.review || needsReview(i.id));
+  const respondable = i => secOf(i) !== "todo";
+  const shown = itemsOf(st).filter(i => !S.review || (respondable(i) && needsReview(i.id)));
   if (S.review && !shown.length) return `<p class="empty">Nothing waiting for review for ${esc(st)}.</p>`;
   const thead = `<div class="thead" aria-hidden="true"><span>Course</span><span>Assignment</span><span>Due</span><span>Messages</span></div>`;
   return SECTIONS[st].map(k => {
@@ -403,8 +422,21 @@ function allView(st) {
     let html = `<section class="sect"><h2 class="secth">${esc(SEC_LABEL[k])} <span class="count">${list.length}</span></h2>`;
     if (MODE === "parent" && !S.review && (k === "college" || k === "other")) html += addForm(st, k);
     if (!list.length) return html + `<p class="empty">None</p></section>`;
+    if (k === "todo") return html + todoList(list) + `</section>`;
     html += thead + groups(k, list).map(g => (g.title ? `<h3>${esc(g.title)}</h3>` : "") + `<div class="list">${g.items.map(card).join("")}</div>`).join("");
     return html + `</section>`;
+  }).join("");
+}
+
+function todoLine(i, when) {
+  const nm = i.link ? `<a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.name)}</a>` : esc(i.name);
+  return `<li class="tline"><span class="t-cls">${esc(i.cls || "")}</span><span class="t-name">${i.bold ? `<strong>${nm}</strong>` : nm}${i.detail ? `<span class="t-detail">${br(i.detail)}</span>` : ""}</span><span class="t-when">${when}</span></li>`;
+}
+function todoList(list) {
+  return groups("todo", list).map(g => {
+    const rem = g.title === "Study reminders";
+    const lines = g.items.map(i => todoLine(i, rem ? `(${esc(i.due)})` : esc(i.tag || ""))).join("");
+    return `<div class="tgroup"><h3>${esc(g.title)}</h3><ul class="tlist${rem ? " rem" : ""}">${lines}</ul></div>`;
   }).join("");
 }
 
@@ -426,7 +458,7 @@ function groups(k, list) {
 }
 
 function card(i) {
-  const open = S.open.has(i.id); const t = threadOf(i.id); const un = unreadOf(i.id);
+  const t = threadOf(i.id); const un = unreadOf(i.id);
   const nm = i.link ? `<a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.name)}</a>` : esc(i.name);
   const sym = i.section === "missing" ? "🔴 " : i.section === "unknown" ? "⚫ " : "";
   const name = sym + (i.bold ? `<strong>${nm}</strong>` : nm);
@@ -435,15 +467,13 @@ function card(i) {
   else if (i.section === "todo") meta = i.reminder ? `<span class="chip">Study reminder</span> ${esc(i.due)}` : (i.due ? `Due ${esc(i.due)} ${esc(i.tag)}` : "No due date");
   else meta = i.due ? `Due ${esc(i.due)}` : "";
   const rev = MODE === "parent" && needsReview(i.id) ? `<span class="chip rev">Needs review</span>` : "";
-  const label = open ? "Close" : (MODE === "kid" ? "💬 Reply" : "💬 Message or set status");
   const talk = (t.length ? t.map(msgView).join("") : `<p class="none">No messages yet</p>`)
-    + `<button class="toggle" data-act="toggle" data-id="${esc(i.id)}" aria-expanded="${open}">${label}</button>`;
+    + (MODE === "kid" ? kidComposer(i) : parentComposer(i));
   return `<article class="card ${i.section}" id="card-${sid(i.id)}">
     <div class="c-course">${i.cls ? `<div class="cls">${esc(i.cls)}</div>` : `<div class="cls none-cls">—</div>`}</div>
     <div class="c-item"><div class="name">${name}</div>${i.detail ? `<div class="detail">${br(i.detail)}</div>` : ""}</div>
     <div class="c-due">${meta ? `<div class="meta">${meta}</div>` : ""}${rev}</div>
     <div class="c-talk thread"${un && !PREVIEW ? ` data-unread="${esc(i.id)}"` : ""}>${talk}</div>
-    ${open ? `<div class="c-compose">${MODE === "kid" ? kidComposer(i) : parentComposer(i)}</div>` : ""}
   </article>`;
 }
 
@@ -482,11 +512,8 @@ function msgView(m) {
 function kidComposer(i) {
   if (PREVIEW) return `<p class="tx">Replies are turned off in preview. Here, ${esc(i.student)} sees a box to type a reply.</p>`;
   const id = i.id, k = sid(id);
-  return `<div class="composer">
-    <label class="f" for="d-${k}">Reply about this item, as ${esc(S.student)}</label>
-    <textarea id="d-${k}" data-draft="${esc(id)}" placeholder="Type a reply…">${esc(S.drafts[id] || "")}</textarea>
-    <div class="row"><button class="btn" data-act="send" data-id="${esc(id)}">Send</button></div>
-    <div class="tx">${MIC_TIP}</div></div>`;
+  return `<div class="composer inline"><textarea id="d-${k}" data-draft="${esc(id)}" rows="1" aria-label="Reply about this item, as ${esc(S.student)}" placeholder="Reply about this item…">${esc(S.drafts[id] || "")}</textarea>
+    <button class="btn small" data-act="send" data-id="${esc(id)}">Send</button></div>`;
 }
 
 function parentComposer(i) {
@@ -497,7 +524,7 @@ function parentComposer(i) {
       <label><input type="radio" name="sp-${k}" data-speaker="${esc(id)}" value="me" ${sp === "me" ? "checked" : ""}> Message to ${esc(kid)}</label>
       <label><input type="radio" name="sp-${k}" data-speaker="${esc(id)}" value="kid" ${sp === "kid" ? "checked" : ""}> ${esc(kid)} told me</label>
     </div>
-    <textarea id="d-${k}" data-draft="${esc(id)}" aria-label="${sp === "me" ? `Message to ${esc(kid)}` : `What ${esc(kid)} told you`}" placeholder="${sp === "me" ? "What's expected…" : `What ${esc(kid)} said, in their words…`}">${esc(S.drafts[id] || "")}</textarea>
+    <textarea id="d-${k}" data-draft="${esc(id)}" rows="2" aria-label="${sp === "me" ? `Message to ${esc(kid)}` : `What ${esc(kid)} told you`}" placeholder="${sp === "me" ? "What's expected…" : `What ${esc(kid)} said, in their words…`}">${esc(S.drafts[id] || "")}</textarea>
     <div class="row"><button class="btn" data-act="pmsg" data-id="${esc(id)}">${sp === "me" ? "Send message" : `Save as ${esc(kid)}'s reply`}</button></div></div>`;
   if (i.origin === "tracker") {
     const opts = STATUSES.filter(s => s !== "settled: done" || i.section === "followup");
@@ -507,14 +534,14 @@ function parentComposer(i) {
     const nb = S.noteBy[id] || "parent";
     html += `<div class="statusbox"><label class="f" for="s-${k}">Set a status${lr && needsReview(id) ? " (answers the latest reply)" : ""}</label>
       <select id="s-${k}" data-statussel="${esc(id)}"><option value="">Choose…</option>${opts.map(s => `<option ${s === cur ? "selected" : ""}>${esc(s)}</option>`).join("")}</select>
-      <label class="f" for="n-${k}">${need ? "Note (needed for this status)" : "Note (optional)"}</label>
+      ${cur ? `<label class="f" for="n-${k}">${need ? "Note (needed for this status)" : "Note (optional)"}</label>
       <textarea id="n-${k}" data-notetext="${esc(id)}" placeholder="Add a note…">${esc(S.noteText[id] || "")}</textarea>
       <div class="seg" role="radiogroup" aria-label="Whose words is the note">
         <label><input type="radio" name="nb-${k}" data-noteby="${esc(id)}" value="parent" ${nb === "parent" ? "checked" : ""}> My words</label>
         <label><input type="radio" name="nb-${k}" data-noteby="${esc(id)}" value="student" ${nb === "student" ? "checked" : ""}> ${esc(kid)}'s words</label>
       </div>
       ${lr && (lr.body || lr.transcript) ? `<div class="row"><button class="btn ghost small" data-act="usereply" data-id="${esc(id)}">Use ${esc(kid)}'s last reply as the note</button></div>` : ""}
-      <div class="row"><button class="btn" data-act="pstatus" data-id="${esc(id)}" ${cur ? "" : "disabled"}>Save status</button></div></div>`;
+      <div class="row"><button class="btn" data-act="pstatus" data-id="${esc(id)}">Save status</button></div>` : ""}</div>`;
   } else {
     if (S.editing === id) {
       html += `<div class="form statusbox"><label class="f">Title<input type="text" id="et-${k}" value="${esc(i.name)}"></label>
@@ -546,15 +573,12 @@ async function act(a, el) {
     case "refresh": S.notice = ""; await load(); break;
     case "sw": S.student = el.dataset.st; ls.set("hub-student", S.student); S.adding = null; S.editing = null; render(); if (MODE === "parent") loadClips(); break;
     case "review": S.review = !S.review; render(); break;
-    case "toggle":
-      if (S.open.has(id)) S.open.delete(id); else { S.open.add(id); markRead(id, true); }
-      render(); break;
     case "send": {
       const body = (S.drafts[id] || "").trim(); if (!body) { notice("Type a reply first."); return; }
       el.disabled = true;
       const { error } = await sb.rpc("kid_reply", { p_token: TOKEN, p_item_id: id, p_author: S.student.toLowerCase(), p_body: body });
       if (error) { el.disabled = false; notice("Couldn't send: " + error.message); return; }
-      S.drafts[id] = ""; S.open.delete(id); S.notice = "Sent."; await load(); break;
+      S.drafts[id] = ""; S.notice = "Sent."; await load(); break;
     }
     case "gsend": {
       const body = (S.general || "").trim(); if (!body) { notice("Type a reply first."); return; }
@@ -607,7 +631,7 @@ async function act(a, el) {
       const { error } = await sb.from("messages").insert({ item_id: id, author: "parent", kind: "status", status, body,
         note_by: body ? (S.noteBy[id] || "parent") : null, reply_to: lr && needsReview(id) ? lr.id : null });
       if (error) { el.disabled = false; notice("Couldn't save the status: " + error.message); return; }
-      delete S.statusSel[id]; delete S.noteText[id]; delete S.noteBy[id]; S.open.delete(id); S.notice = `Status saved: ${status}.`; await load(); break;
+      delete S.statusSel[id]; delete S.noteText[id]; delete S.noteBy[id]; S.notice = `Status saved: ${status}.`; await load(); break;
     }
     case "copyledger": await copyLedger(); break;
     case "markcopied": await markCopied(S.fallback.ids); S.fallback = null; render(); break;
@@ -634,7 +658,7 @@ async function act(a, el) {
       if (!confirm("Archive this item? It disappears from both views.")) return;
       const { error } = await sb.from("items").update({ archived_at: new Date().toISOString() }).eq("id", id);
       if (error) { notice("Couldn't archive: " + error.message); return; }
-      S.open.delete(id); S.notice = "Archived."; await load(); break;
+      S.notice = "Archived."; await load(); break;
     }
     case "signin": {
       const email = document.getElementById("email").value.trim();
