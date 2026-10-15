@@ -291,7 +291,7 @@ const secOf = i => {
   if (i.origin === "manual") return i.section;
   if (i.section === "todo") return "todo";
   // excused: off the kids' page, and in my Resolved section until the hub refresh takes it off
-  if (lastStatus(i.id) === "excused") return "resolved";
+  if (CLOSED.includes(lastStatus(i.id))) return "resolved";
   // Mom moved it back to New & Outstanding: it stays there until the student's next reply on it
   if (i.place === "new" && !threadOf(i.id).some(m => m.kind === "reply" && new Date(m.created_at) > new Date(i.place_at))) return "new";
   if (i.section === "followup" || i.hold || threadOf(i.id).some(m => m.kind === "reply")) return "follow";
@@ -328,7 +328,9 @@ function needsReview(id) {
 // latest status Mom set on an item (null if none)
 function lastStatus(id) { const s = threadOf(id).filter(m => m.kind === "status"); return s.length ? s[s.length - 1].status : null; }
 // kids don't see an item once its latest status is "excused"; my view still shows it until the hub refresh
-const itemsOf = st => S.items.filter(i => live(i) && i.student === st && !(MODE === "kid" && lastStatus(i.id) === "excused"));
+// statuses that close an item on the hub right away: Resolved in my view, gone from the kids' page
+const CLOSED = ["excused", "no count"];
+const itemsOf = st => S.items.filter(i => live(i) && i.student === st && !(MODE === "kid" && CLOSED.includes(lastStatus(i.id))));
 function notice(t) { S.notice = t; render(); }
 function byId() { const o = {}; S.items.forEach(i => { o[i.id] = i; }); return o; }
 
@@ -503,7 +505,7 @@ function sectionBlock(st, k, list, withAdd) {
   if (!list.length && !add && (handKept || S.review)) return "";
   const blurb = { new: MODE === "kid" ? "Missing or unknown — reply to tell Mom where it stands." : "Missing or unknown, with no reply from the student yet.",
     follow: MODE === "kid" ? "You've replied. The Next step shows what it's waiting on." : "The student has replied, or there's a Next step. Track it to the finish.",
-    resolved: "Excused — off the student's page. Leaves here after the next hub refresh. Pick another status to bring it back." }[k];
+    resolved: "Excused or No Count — already off the student's page. Leaves here after the next hub refresh. Pick another status to bring it back." }[k];
   let html = `<section class="sect sec-${k}"><h2 class="grph">${esc(SEC_LABEL[k])} <span class="count">${list.length}</span></h2>${blurb ? `<p class="secblurb">${esc(blurb)}</p>` : ""}`;
   if (add) html += addForm(st, k);
   if (list.length) {
@@ -828,21 +830,20 @@ async function act(a, el) {
       const body = (S.editText || "").trim(); if (!body) { notice("A message can't be empty. Use Remove instead."); return; }
       el.disabled = true;
       // an edited message shows "New" to the student again
-      const { error } = await sb.from("messages").update({ body, edited_at: new Date().toISOString(), read_by_student_at: null })
-        .eq("id", id).eq("author", "parent").eq("kind", "message");
-      if (error) { el.disabled = false; notice("Couldn't save the edit: " + error.message); return; }
+      const { data: n, error } = await sb.rpc("parent_message_edit", { p_id: id, p_body: body });
+      if (error || n !== 1) { el.disabled = false; notice("Couldn't save the edit" + (error ? ": " + error.message : " — nothing was changed. Tap Refresh and try again.")); return; }
       S.editMsg = null; S.editText = ""; S.notice = "Message updated."; await load(); break;
     }
     case "msgdel": {
       if (!confirm("Remove this message from the student's view? You'll still see it, marked removed.")) return;
-      const { error } = await sb.from("messages").update({ removed_at: new Date().toISOString() }).eq("id", id).eq("author", "parent").eq("kind", "message");
-      if (error) { notice("Couldn't remove it: " + error.message); return; }
+      const { data: n, error } = await sb.rpc("parent_message_remove", { p_id: id, p_removed: true });
+      if (error || n !== 1) { notice("Couldn't remove it" + (error ? ": " + error.message : " — nothing was changed. Tap Refresh and try again.")); return; }
       if (S.editMsg === id) { S.editMsg = null; S.editText = ""; }
       S.notice = "Removed from the student's view."; await load(); break;
     }
     case "msgrestore": {
-      const { error } = await sb.from("messages").update({ removed_at: null }).eq("id", id).eq("author", "parent").eq("kind", "message");
-      if (error) { notice("Couldn't restore it: " + error.message); return; }
+      const { data: n, error } = await sb.rpc("parent_message_remove", { p_id: id, p_removed: false });
+      if (error || n !== 1) { notice("Couldn't restore it" + (error ? ": " + error.message : " — nothing was changed. Tap Refresh and try again.")); return; }
       S.notice = "Restored — the student can see it again."; await load(); break;
     }
     case "hold": {
