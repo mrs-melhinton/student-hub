@@ -221,6 +221,14 @@ const SEC_HEADS = {
 const NEXT_STEPS = ["Awaiting turn in", "Awaiting teacher", "Awaiting Skyward", "Awaiting Canvas", "Awaiting response"];
 const STATUSES = ["student says done", "I confirm done", "plan note", "status note", "settled: done", "excused", "no count"];
 const NOTE_STATUSES = ["plan note", "status note"];
+// what the dropdown and history call each status. The stored value stays the same, so
+// Copy for ledger still writes "settled: done", which the tracker rules expect.
+const STATUS_LABEL = { "settled: done": "resolved" };
+const statusLabel = st => STATUS_LABEL[st] || st;
+const STATUS_GROUPS = [
+  ["Planning & follow-up — item stays open", ["student says done", "I confirm done", "plan note", "status note"]],
+  ["Close out — moves to Resolved, off the student's page", ["settled: done", "excused", "no count"]]
+];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"];
 
 // ---------- Copy for ledger: same line format as the Feedback Ledger's "Copy new answers" ----------
@@ -329,7 +337,7 @@ function needsReview(id) {
 function lastStatus(id) { const s = threadOf(id).filter(m => m.kind === "status"); return s.length ? s[s.length - 1].status : null; }
 // kids don't see an item once its latest status is "excused"; my view still shows it until the hub refresh
 // statuses that close an item on the hub right away: Resolved in my view, gone from the kids' page
-const CLOSED = ["excused", "no count"];
+const CLOSED = ["settled: done", "excused", "no count"];
 const itemsOf = st => S.items.filter(i => live(i) && i.student === st && !(MODE === "kid" && CLOSED.includes(lastStatus(i.id))));
 function notice(t) { S.notice = t; render(); }
 function byId() { const o = {}; S.items.forEach(i => { o[i.id] = i; }); return o; }
@@ -645,9 +653,9 @@ function noteWho(m, item) {
 function statusLine(m) {
   const item = S.items.find(i => i.id === m.item_id);
   const note = m.body ? ` — “${esc(m.body)}” <span class="tx" style="display:inline">(${noteWho(m, item)})</span>` : "";
-  if (MODE === "parent") return `Status: ${esc(m.status)}${note}`;
+  if (MODE === "parent") return `Status: ${esc(statusLabel(m.status))}${note}`;
   return ({ "student says done": "Noted: you said it's done", "I confirm done": "Confirmed done", "plan note": "Plan noted", "status note": "Noted",
-    "settled: done": "Settled: done", "excused": "Excused", "no count": "No count" }[m.status] || esc(m.status)) + note;
+    "settled: done": "Resolved", "excused": "Excused", "no count": "No count" }[m.status] || esc(m.status)) + note;
 }
 function msgView(m) {
   if (m.kind === "status") return `<div class="msg status">✔ ${statusLine(m)}<span class="who">— ${whoLabel(m.author)}, ${when(m.created_at)}</span></div>`;
@@ -700,7 +708,9 @@ function parentComposer(i) {
     const need = NOTE_STATUSES.includes(cur);
     const nb = S.noteBy[id] || "parent";
     html += `<div class="statusbox"><label class="f" for="s-${k}">Set a status${lr && needsReview(id) ? " (answers the latest reply)" : ""}</label>
-      <select id="s-${k}" data-statussel="${esc(id)}"><option value="">Choose…</option>${opts.map(s => `<option ${s === cur ? "selected" : ""}>${esc(s)}</option>`).join("")}</select>
+      <select id="s-${k}" data-statussel="${esc(id)}"><option value="">Choose…</option>${STATUS_GROUPS.map(([g, list], n) =>
+        (n ? `<hr>` : "") + `<optgroup label="${esc(g)}">${list.filter(x => opts.includes(x)).map(x =>
+          `<option value="${esc(x)}" ${x === cur ? "selected" : ""}>${esc(statusLabel(x))}</option>`).join("")}</optgroup>`).join("")}</select>
       ${cur ? `<label class="f" for="n-${k}">${need ? "Note (needed for this status)" : "Note (optional)"}</label>
       <textarea id="n-${k}" data-notetext="${esc(id)}" placeholder="Add a note…">${esc(S.noteText[id] || "")}</textarea>
       <div class="seg" role="radiogroup" aria-label="Whose words is the note">
@@ -812,7 +822,7 @@ async function act(a, el) {
       const { error } = await sb.from("messages").insert({ item_id: id, author: "parent", kind: "status", status, body,
         note_by: body ? (S.noteBy[id] || "parent") : null, reply_to: lr && needsReview(id) ? lr.id : null });
       if (error) { el.disabled = false; notice("Couldn't save the status: " + error.message); return; }
-      delete S.statusSel[id]; delete S.noteText[id]; delete S.noteBy[id]; S.notice = `Status saved: ${status}.`; await load(); break;
+      delete S.statusSel[id]; delete S.noteText[id]; delete S.noteBy[id]; S.notice = `Status saved: ${statusLabel(status)}.`; await load(); break;
     }
     case "copyledger": await copyLedger(); break;
     case "tonew": {
