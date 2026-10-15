@@ -126,6 +126,11 @@ p{margin:0}
 .sec-resolved>.grph{font-size:1.3rem;margin:-14px -14px 0;padding:10px 16px;border-radius:13px 13px 0 0;background:var(--ok-soft);color:var(--ok)}
 .card.row-resolved{border-left-color:var(--ok);opacity:.9}
 .backbtn{align-self:flex-start;margin-top:4px;font-size:.82rem}
+.msgimg{display:block;margin-top:6px}
+.msgimg img{max-width:100%;max-height:260px;border-radius:8px;border:1px solid var(--line);display:block}
+.photobtn{cursor:pointer;display:inline-flex;align-items:center}
+.photochip{display:inline-flex;align-items:center;gap:8px;font-size:.88rem;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+.photorow{margin-top:6px}
 .moveto{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .mlabel-always{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .moveto select,.moveto input{font-size:.88rem;padding:7px 8px}
@@ -286,7 +291,7 @@ const ls = {
 const S = {
   phase: "loading", items: [], msgs: [], student: STUDENTS.includes(ls.get("hub-student")) ? ls.get("hub-student") : "Kyan",
   open: new Set(), review: false, drafts: {}, notice: "", general: "", applySel: {},
-  again: false, holdSel: {}, holdText: {}, statusSel: {}, noteText: {}, noteBy: {}, speaker: {}, editing: null, editMsg: null, editText: "", adding: null, clipUrls: {}, fallback: null, session: null, err: ""
+  again: false, holdSel: {}, holdText: {}, statusSel: {}, noteText: {}, noteBy: {}, speaker: {}, editing: null, editMsg: null, editText: "", adding: null, clipUrls: {}, photos: {}, imgUrls: {}, fallback: null, session: null, err: ""
 };
 const MIC_TIP = "Tip: tap the 🎤 on your keyboard to talk instead of type.";
 
@@ -365,6 +370,7 @@ async function load() {
   } catch (e) { S.phase = "error"; S.err = String(e && e.message || e); }
   render();
   if (MODE === "parent") loadClips();
+  loadImages();
 }
 
 // Old voice clips (from before recording was turned off) still play in my view.
@@ -672,7 +678,7 @@ function msgView(m) {
   const mine = MODE === "parent" && m.author === "parent" && m.kind === "message";
   if (mine && m.removed_at) {
     return `<div class="msg parent removed"><span class="who">You · ${when(m.created_at)} · <span class="edited">removed — ${esc(S.items.find(i => i.id === m.item_id)?.student || "the student")} can't see this</span>
-      <span class="msgtools"><button class="linkbtn" data-act="msgrestore" data-id="${esc(m.id)}">Restore</button></span></span>${m.body ? br(m.body) : ""}</div>`;
+      <span class="msgtools"><button class="linkbtn" data-act="msgrestore" data-id="${esc(m.id)}">Restore</button></span></span>${m.body ? br(m.body) : ""}${photoHtml(m)}</div>`;
   }
   const edited = m.edited_at ? ` <span class="edited">(edited)</span>` : "";
   if (mine && S.editMsg === m.id) {
@@ -681,14 +687,75 @@ function msgView(m) {
       <div class="row"><button class="btn small" data-act="msgsave" data-id="${esc(m.id)}">Save</button><button class="btn ghost small" data-act="msgcancel">Cancel</button></div></div>`;
   }
   const tools = mine ? `<span class="msgtools"><button class="linkbtn" data-act="msgedit" data-id="${esc(m.id)}">Edit</button><button class="linkbtn" data-act="msgdel" data-id="${esc(m.id)}">Remove</button></span>` : "";
-  return `<div class="msg ${cls}"><span class="who">${isNew ? '<span class="newtag">New</span> ' : ""}${m.kind === "reply" ? replyLabel(m) : whoLabel(m.author)} · ${when(m.created_at)}${edited}${tools}</span>${m.body ? br(m.body) : ""}${clip}</div>`;
+  return `<div class="msg ${cls}"><span class="who">${isNew ? '<span class="newtag">New</span> ' : ""}${m.kind === "reply" ? replyLabel(m) : whoLabel(m.author)} · ${when(m.created_at)}${edited}${tools}</span>${m.body ? br(m.body) : ""}${photoHtml(m)}${clip}</div>`;
+}
+
+// ---------- photos on messages ----------
+const IMG_FN = SB_URL + "/functions/v1/hub-images";
+// shrink big phone photos before upload (longest side 1600px, JPEG); falls back to the original
+async function shrinkPhoto(file) {
+  try {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((ok, bad) => { const im = new Image(); im.onload = () => ok(im); im.onerror = bad; im.src = url; });
+    const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+    const blob = await new Promise(ok => c.toBlob(ok, "image/jpeg", 0.85));
+    return blob && blob.size ? blob : file;
+  } catch (e) { return file; }
+}
+async function uploadPhoto(itemId, file) {
+  const blob = await shrinkPhoto(file);
+  if (blob.size > 10 * 1024 * 1024) throw new Error("that photo is larger than 10 MB");
+  const type = blob.type && blob.type.startsWith("image/") ? blob.type : "image/jpeg";
+  if (MODE === "kid") {
+    const r = await fetch(IMG_FN + "?action=upload", { method: "POST", body: blob,
+      headers: { "content-type": type, "x-family-token": TOKEN, "x-item-id": itemId, apikey: SB_KEY } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.path) throw new Error(j.error || "upload failed");
+    return j.path;
+  }
+  const path = String(itemId).replace(/[^A-Za-z0-9._-]/g, "_") + "/" + crypto.randomUUID() + ".jpg";
+  const { error } = await sb.storage.from("message-images").upload(path, blob, { contentType: type, upsert: false });
+  if (error) throw error;
+  return path;
+}
+// signed links (1 hour) for every photo on screen
+async function loadImages() {
+  const need = [...new Set(S.msgs.filter(m => m.image_path && !(S.imgUrls[m.image_path] && S.imgUrls[m.image_path].exp > Date.now())).map(m => m.image_path))];
+  if (!need.length) return;
+  let urls = {};
+  try {
+    if (MODE === "kid") {
+      const r = await fetch(IMG_FN + "?action=sign", { method: "POST", body: JSON.stringify({ paths: need }),
+        headers: { "content-type": "application/json", "x-family-token": TOKEN, apikey: SB_KEY } });
+      urls = (await r.json()).urls || {};
+    } else {
+      const { data } = await sb.storage.from("message-images").createSignedUrls(need, 3600);
+      (data || []).forEach(d => { if (d.signedUrl) urls[d.path] = d.signedUrl; });
+    }
+  } catch (e) { return; }
+  Object.entries(urls).forEach(([p, u]) => { S.imgUrls[p] = { url: u, exp: Date.now() + 50 * 60 * 1000 }; });
+  if (Object.keys(urls).length) render();
+}
+function photoHtml(m) {
+  if (!m.image_path) return "";
+  const u = S.imgUrls[m.image_path];
+  return u ? `<a class="msgimg" href="${esc(u.url)}" target="_blank" rel="noopener"><img src="${esc(u.url)}" alt="Photo" loading="lazy"></a>`
+    : `<div class="tx">📷 Loading photo…</div>`;
+}
+function photoPicker(id) {
+  const f = S.photos[id];
+  return f ? `<span class="photochip">📷 ${esc(f.name || "photo")} <button class="linkbtn" data-act="photoclear" data-id="${esc(id)}" aria-label="Remove photo">✕</button></span>`
+    : `<label class="btn ghost small photobtn">📷 Add photo<input type="file" accept="image/*" data-photo="${esc(id)}" hidden></label>`;
 }
 
 function kidComposer(i) {
   if (PREVIEW) return `<p class="tx">Replies are turned off in preview. Here, ${esc(i.student)} sees a box to type a reply.</p>`;
   const id = i.id, k = sid(id);
   return `<div class="composer inline"><textarea id="d-${k}" data-draft="${esc(id)}" rows="1" aria-label="Reply about this item, as ${esc(S.student)}" placeholder="Reply about this item…">${esc(S.drafts[id] || "")}</textarea>
-    <button class="btn small" data-act="send" data-id="${esc(id)}">Send</button></div>`;
+    <button class="btn small" data-act="send" data-id="${esc(id)}">Send</button></div><div class="row photorow">${photoPicker(id)}</div>`;
 }
 
 function parentComposer(i) {
@@ -700,7 +767,7 @@ function parentComposer(i) {
       <label><input type="radio" name="sp-${k}" data-speaker="${esc(id)}" value="kid" ${sp === "kid" ? "checked" : ""}> ${esc(kid)} told me</label>
     </div>
     <textarea id="d-${k}" data-draft="${esc(id)}" rows="2" aria-label="${sp === "me" ? `Message to ${esc(kid)}` : `What ${esc(kid)} told you`}" placeholder="${sp === "me" ? "What's expected…" : `What ${esc(kid)} said, in their words…`}">${esc(S.drafts[id] || "")}</textarea>
-    <div class="row"><button class="btn" data-act="pmsg" data-id="${esc(id)}">${sp === "me" ? "Send message" : `Save as ${esc(kid)}'s reply`}</button></div></div>`;
+    <div class="row">${photoPicker(id)}<button class="btn" data-act="pmsg" data-id="${esc(id)}">${sp === "me" ? "Send message" : `Save as ${esc(kid)}'s reply`}</button></div></div>`;
   if (i.origin === "tracker") {
     // "resolved" (settled: done) closes any tracker item — rules FR-OUTCOME / AH2, Oct 15
     const opts = STATUSES;
@@ -765,12 +832,15 @@ async function act(a, el) {
     case "sw": S.student = el.dataset.st; ls.set("hub-student", S.student); S.adding = null; S.editing = null; render(); if (MODE === "parent") loadClips(); break;
     case "review": S.review = !S.review; render(); break;
     case "send": {
-      const body = (S.drafts[id] || "").trim(); if (!body) { notice("Type a reply first."); return; }
+      const body = (S.drafts[id] || "").trim(); const photo = S.photos[id];
+      if (!body && !photo) { notice("Type a reply or add a photo first."); return; }
       el.disabled = true;
-      const { error } = await sb.rpc("kid_reply", { p_token: TOKEN, p_item_id: id, p_author: S.student.toLowerCase(), p_body: body });
+      let image = null;
+      if (photo) { try { image = await uploadPhoto(id, photo); } catch (e) { el.disabled = false; notice("Couldn't send the photo: " + (e.message || e)); return; } }
+      const { error } = await sb.rpc("kid_reply", { p_token: TOKEN, p_item_id: id, p_author: S.student.toLowerCase(), p_body: body, p_image_path: image });
       if (error) { el.disabled = false; notice("Couldn't send: " + error.message); return; }
       if (!PREVIEW) await sb.rpc("kid_mark_read", { p_token: TOKEN, p_item_id: id });
-      S.drafts[id] = ""; S.notice = "Sent."; await load(); break;
+      S.drafts[id] = ""; delete S.photos[id]; S.notice = "Sent."; await load(); break;
     }
     case "gsend": {
       const body = (S.general || "").trim(); if (!body) { notice("Type a reply first."); return; }
@@ -799,16 +869,19 @@ async function act(a, el) {
       delete S.applySel[id]; S.notice = "Marked sorted."; await load(); break;
     }
     case "pmsg": {
-      const body = (S.drafts[id] || "").trim(); if (!body) { notice("Type something first."); return; }
+      const body = (S.drafts[id] || "").trim() || null; const photo = S.photos[id];
+      if (!body && !photo) { notice("Type something or add a photo first."); return; }
       const item = S.items.find(x => x.id === id);
       const asKid = (S.speaker[id] || "me") === "kid";
       el.disabled = true;
+      let image_path = null;
+      if (photo) { try { image_path = await uploadPhoto(id, photo); } catch (e) { el.disabled = false; notice("Couldn't upload the photo: " + (e.message || e)); return; } }
       const row = asKid
-        ? { item_id: id, author: item.student.toLowerCase(), kind: "reply", body, entered_by: "parent", read_by_parent_at: new Date().toISOString() }
-        : { item_id: id, author: "parent", kind: "message", body };
+        ? { item_id: id, author: item.student.toLowerCase(), kind: "reply", body, image_path, entered_by: "parent", read_by_parent_at: new Date().toISOString() }
+        : { item_id: id, author: "parent", kind: "message", body, image_path };
       const { error } = await sb.from("messages").insert(row);
       if (error) { el.disabled = false; notice("Couldn't save: " + error.message); return; }
-      S.drafts[id] = ""; S.notice = asKid ? `Saved as ${item.student}'s reply.` : "Message sent."; await load(); break;
+      S.drafts[id] = ""; delete S.photos[id]; S.notice = asKid ? `Saved as ${item.student}'s reply.` : "Message sent."; await load(); break;
     }
     case "usereply": {
       const lr = lastReply(id); if (!lr) return;
@@ -826,6 +899,7 @@ async function act(a, el) {
       delete S.statusSel[id]; delete S.noteText[id]; delete S.noteBy[id]; S.notice = `Status saved: ${statusLabel(status)}.`; await load(); break;
     }
     case "copyledger": await copyLedger(); break;
+    case "photoclear": delete S.photos[id]; render(); break;
     case "tonew": {
       el.disabled = true;
       // clears its Next step and pins it to New & Outstanding until the student's next reply
@@ -973,6 +1047,7 @@ document.addEventListener("input", e => {
 });
 document.addEventListener("change", e => {
   const t = e.target;
+  if (t.dataset.photo !== undefined) { const f = t.files && t.files[0]; if (f) { S.photos[t.dataset.photo] = f; render(); } return; }
   if (t.dataset.statussel !== undefined) { S.statusSel[t.dataset.statussel] = t.value; render(); }
   if (t.dataset.holdsel !== undefined) {
     const id = t.dataset.holdsel, v = t.value;
