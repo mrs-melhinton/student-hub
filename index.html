@@ -89,7 +89,7 @@ p{margin:0}
 .t-cls{font-weight:700;font-size:1.05rem}
 .t-name{overflow-wrap:anywhere}
 .t-detail{display:block;font-size:.92rem;color:var(--muted)}
-.t-when{color:var(--muted);font-size:.95rem}
+.t-when{color:var(--muted);font-size:.95rem;white-space:nowrap}
 @media (min-width:900px){
   .wrap{max-width:1180px}
   .thead{display:grid;grid-template-columns:190px minmax(0,1.1fr) 140px minmax(0,1.6fr);column-gap:18px;padding:0 15px 6px 19px;font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
@@ -97,8 +97,7 @@ p{margin:0}
   .card .c-due:empty{display:block}
   .none-cls{display:block;color:var(--muted)}
   .c-talk.thread{border-top:0;padding-top:0;margin-top:0}
-  .tline{grid-template-columns:190px minmax(0,1fr) 170px;column-gap:18px;align-items:baseline}
-  .t-when{text-align:left}
+  .tline{grid-template-columns:190px minmax(0,1fr);column-gap:18px;align-items:baseline}
 }
 .card.missing{border-left-color:var(--miss)} .card.unknown{border-left-color:var(--unk)}
 .card.followup{border-left-color:var(--fu)} .card.todo{border-left-color:var(--todo)}
@@ -453,12 +452,13 @@ function sectionBlock(st, k, list, withAdd) {
 
 function todoLine(i, when) {
   const nm = i.link ? `<a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.name)}</a>` : esc(i.name);
-  return `<li class="tline"><span class="t-cls">${esc(i.cls || "")}</span><span class="t-name">${i.bold ? `<strong>${nm}</strong>` : nm}${i.detail ? `<span class="t-detail">${br(i.detail)}</span>` : ""}</span><span class="t-when">${when}</span></li>`;
+  return `<li class="tline"><span class="t-cls">${esc(i.cls || "")}</span><span class="t-name">${i.bold ? `<strong>${nm}</strong>` : nm}${when ? ` <span class="t-when">${when}</span>` : ""}${i.detail ? `<span class="t-detail">${br(i.detail)}</span>` : ""}</span></li>`;
 }
 function todoList(list) {
   return groups("todo", list).map(g => {
     const rem = g.title === "Study reminders";
-    const lines = g.items.map(i => todoLine(i, rem ? `(${esc(i.due)})` : esc(i.tag || ""))).join("");
+    // undated items get no time tag; dated items show it right after the name
+    const lines = g.items.map(i => todoLine(i, rem ? `(${esc(i.due)})` : (i.due ? esc(i.tag || "") : ""))).join("");
     return `<div class="tgroup"><h3>${esc(g.title)}</h3><ul class="tlist${rem ? " rem" : ""}">${lines}</ul></div>`;
   }).join("");
 }
