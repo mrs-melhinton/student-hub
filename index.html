@@ -107,8 +107,11 @@ p{margin:0}
 .sect.sec-new,.sect.sec-follow{border-radius:16px;padding:14px 14px 16px;border:2px solid}
 .sect.sec-new{background:var(--miss-soft);border-color:var(--miss)}
 .sect.sec-follow{background:var(--fu-soft);border-color:var(--fu)}
-.sec-new>.grph{color:var(--miss)} .sec-follow>.grph{color:var(--fu)}
-.sec-new>.grph,.sec-follow>.grph{font-size:1.45rem;margin:0}
+.sec-new>.grph,.sec-follow>.grph{font-size:1.45rem;margin:-14px -14px 0;padding:12px 16px;border-radius:13px 13px 0 0;color:var(--bg)}
+.sec-new>.grph{background:var(--miss)} .sec-follow>.grph{background:var(--fu)}
+.sec-new>.grph .count,.sec-follow>.grph .count{color:var(--bg);opacity:.85}
+.secblurb{margin-top:10px !important}
+.secdivider{height:6px;border-radius:3px;background:var(--line);margin:14px 0}
 .secblurb{font-size:.92rem;color:var(--muted);margin:2px 0 12px}
 .sec-new .thead,.sec-follow .thead{color:var(--ink);opacity:.7}
 .edited{font-weight:400;font-style:italic}
@@ -472,7 +475,9 @@ function sortBox(st) {
 function allView(st) {
   const shown = itemsOf(st).filter(i => secOf(i) !== "todo" && (!S.review || needsReview(i.id)));
   if (S.review && !shown.length) return `<p class="empty">Nothing waiting for review for ${esc(st)}.</p>`;
-  return SECTIONS[st].map(k => sectionBlock(st, k, shown.filter(i => secOf(i) === k), true)).join("");
+  // a heavy bar between sections so New & Outstanding and Follow Up never run together
+  return SECTIONS[st].map(k => sectionBlock(st, k, shown.filter(i => secOf(i) === k), true)).filter(Boolean)
+    .join(`<div class="secdivider" role="separator" aria-hidden="true"></div>`);
 }
 function sectionBlock(st, k, list, withAdd) {
   const handKept = k === "college" || k === "other";
