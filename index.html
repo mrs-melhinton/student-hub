@@ -67,6 +67,13 @@ p{margin:0}
 .pick label{display:flex;gap:10px;align-items:flex-start;font-size:.98rem;padding:6px 8px;border-radius:8px;background:var(--bg);cursor:pointer;min-height:44px}
 .pick input{width:22px;height:22px;flex:none;margin-top:2px;accent-color:var(--accent)}
 .thead{display:none}
+.grp{display:flex;flex-direction:column;gap:6px;padding-left:12px;border-left:4px solid var(--accent)}
+.grp.hold{border-left-color:var(--unk);opacity:.97}
+.grph{font-size:1.4rem;margin:0 0 4px}
+.sech{font-size:1.05rem;color:var(--ink);text-transform:none;letter-spacing:0;font-weight:700;margin:14px 0 8px}
+.chip.holdchip{background:var(--unk-soft);color:var(--unk);margin-top:4px}
+.holdbox{display:flex;flex-direction:column;gap:6px;border-top:1px dashed var(--line);padding-top:10px;margin-top:6px}
+.holdbox.row{flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between}
 .again{gap:6px}
 .again-row{justify-content:space-between;border-top:1px solid var(--line);padding-top:6px}
 .stickybox{position:sticky;top:0;z-index:20;background:var(--card);border:2px solid var(--accent);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
@@ -221,7 +228,7 @@ const ls = {
 const S = {
   phase: "loading", items: [], msgs: [], student: STUDENTS.includes(ls.get("hub-student")) ? ls.get("hub-student") : "Kyan",
   open: new Set(), review: false, drafts: {}, notice: "", general: "", applySel: {},
-  again: false, statusSel: {}, noteText: {}, noteBy: {}, speaker: {}, editing: null, adding: null, clipUrls: {}, fallback: null, session: null, err: ""
+  again: false, holdSel: {}, holdText: {}, statusSel: {}, noteText: {}, noteBy: {}, speaker: {}, editing: null, adding: null, clipUrls: {}, fallback: null, session: null, err: ""
 };
 const MIC_TIP = "Tip: tap the 🎤 on your keyboard to talk instead of type.";
 
@@ -269,10 +276,12 @@ async function load() {
       if (e) { S.phase = /invalid family link/i.test(e.message || "") ? "badlink" : "error"; S.err = e.message || ""; render(); return; }
       S.items = a.data || []; S.msgs = b.data || [];
     } else {
-      const [a, b] = await Promise.all([sb.from("items").select("*"), sb.from("messages").select("*").order("created_at")]);
-      const e = a.error || b.error;
+      const [a, b, h] = await Promise.all([sb.from("items").select("*"), sb.from("messages").select("*").order("created_at"), sb.from("item_holds").select("*")]);
+      const e = a.error || b.error || h.error;
       if (e) { S.phase = "error"; S.err = e.message || ""; render(); return; }
       if (!a.data.length) { S.phase = "notparent"; render(); return; }
+      const holds = {}; (h.data || []).forEach(x => { holds[x.item_id] = x; });
+      a.data.forEach(i => { const x = holds[i.id]; i.hold = x ? x.reason : null; i.hold_at = x ? x.set_at : null; });
       S.items = a.data; S.msgs = b.data;
     }
     S.phase = "ready";
@@ -419,17 +428,28 @@ function allView(st) {
   const respondable = i => secOf(i) !== "todo";
   const shown = itemsOf(st).filter(i => !S.review || (respondable(i) && needsReview(i.id)));
   if (S.review && !shown.length) return `<p class="empty">Nothing waiting for review for ${esc(st)}.</p>`;
+  const act = shown.filter(i => respondable(i) && !i.hold);
+  const held = shown.filter(i => respondable(i) && i.hold);
+  const todo = shown.filter(i => !respondable(i));
+  const secs = SECTIONS[st].filter(k => k !== "todo");
+  let html = `<section class="grp act"><h2 class="grph">⚡ ${MODE === "kid" ? "Needs your action" : "Needs action"} <span class="count">${act.length}</span></h2>`
+    + (act.length || (MODE === "parent" && !S.review) ? secs.map(k => sectionBlock(st, k, act.filter(i => secOf(i) === k), true)).join("") : `<p class="empty">Nothing right now.</p>`)
+    + `</section>`;
+  if (!S.review) html += `<section class="sect"><h2 class="secth">${esc(SEC_LABEL.todo)} <span class="count">${todo.length}</span></h2>${todo.length ? todoList(todo) : `<p class="empty">None</p>`}</section>`;
+  if (held.length) html += `<section class="grp hold"><h2 class="grph">⏸ On hold <span class="count">${held.length}</span></h2>
+    <p class="muted small">${MODE === "kid" ? "Waiting on something else first — the reason is on each item." : "Waiting on something else. A new message from you on an item moves it back to Needs action."}</p>`
+    + secs.map(k => sectionBlock(st, k, held.filter(i => secOf(i) === k), false)).join("") + `</section>`;
+  return html;
+}
+// one section (Missing & Unknown, Follow Up, College Apps, Other) inside a group; empty sections are left out
+function sectionBlock(st, k, list, withAdd) {
+  const add = withAdd && MODE === "parent" && !S.review && (k === "college" || k === "other");
+  if (!list.length && !add) return "";
   const thead = `<div class="thead" aria-hidden="true"><span>Course</span><span>Assignment</span><span>Due</span><span>Messages</span></div>`;
-  return SECTIONS[st].map(k => {
-    const list = shown.filter(i => secOf(i) === k);
-    if (S.review && !list.length) return "";
-    let html = `<section class="sect"><h2 class="secth">${esc(SEC_LABEL[k])} <span class="count">${list.length}</span></h2>`;
-    if (MODE === "parent" && !S.review && (k === "college" || k === "other")) html += addForm(st, k);
-    if (!list.length) return html + `<p class="empty">None</p></section>`;
-    if (k === "todo") return html + todoList(list) + `</section>`;
-    html += thead + groups(k, list).map(g => (g.title ? `<h3>${esc(g.title)}</h3>` : "") + `<div class="list">${g.items.map(card).join("")}</div>`).join("");
-    return html + `</section>`;
-  }).join("");
+  let html = `<div class="sect"><h3 class="sech">${esc(SEC_LABEL[k])} <span class="count">${list.length}</span></h3>`;
+  if (add) html += addForm(st, k);
+  if (list.length) html += thead + groups(k, list).map(g => (g.title ? `<h3>${esc(g.title)}</h3>` : "") + `<div class="list">${g.items.map(card).join("")}</div>`).join("");
+  return html + `</div>`;
 }
 
 function todoLine(i, when) {
@@ -470,7 +490,8 @@ function card(i) {
   if (i.origin === "manual") meta = i.due ? `Due ${esc(i.due)}` : "";
   else if (i.section === "todo") meta = i.reminder ? `<span class="chip">Study reminder</span> ${esc(i.due)}` : (i.due ? `Due ${esc(i.due)} ${esc(i.tag)}` : "No due date");
   else meta = i.due ? `Due ${esc(i.due)}` : "";
-  const rev = MODE === "parent" && needsReview(i.id) ? `<span class="chip rev">Needs review</span>` : "";
+  const rev = (MODE === "parent" && needsReview(i.id) ? `<span class="chip rev">Needs review</span>` : "")
+    + (i.hold ? `<span class="chip holdchip">⏸ ${esc(i.hold)}</span>` : "");
   const talk = (t.length ? t.map(msgView).join("") : `<p class="none">No messages yet</p>`)
     + (MODE === "kid" ? kidComposer(i) : parentComposer(i));
   return `<article class="card ${i.section}" id="card-${sid(i.id)}">
@@ -557,7 +578,20 @@ function parentComposer(i) {
         <button class="btn ghost small" data-act="archive" data-id="${esc(id)}">Archive</button></div>`;
     }
   }
-  return html;
+  return html + holdBox(i);
+}
+
+const HOLD_REASONS = ["Talking to teacher", "Waiting for Skyward", "Waiting for Canvas"];
+function holdBox(i) {
+  const id = i.id, k = sid(id);
+  if (i.hold) return `<div class="holdbox row"><span>⏸ On hold: <strong>${esc(i.hold)}</strong>${i.hold_at ? ` <span class="muted">· since ${when(i.hold_at)}</span>` : ""}</span>
+    <button class="btn ghost small" data-act="unhold" data-id="${esc(id)}">Back to needs action</button></div>`;
+  const sel = S.holdSel[id] || ""; const other = sel === "Other…";
+  const ready = sel && (!other || (S.holdText[id] || "").trim());
+  return `<div class="holdbox"><label class="f" for="h-${k}">Put on hold</label>
+    <div class="row"><select id="h-${k}" data-holdsel="${esc(id)}" style="flex:1;min-width:160px"><option value="">Choose a reason…</option>${[...HOLD_REASONS, "Other…"].map(r => `<option ${r === sel ? "selected" : ""}>${esc(r)}</option>`).join("")}</select>
+    <button class="btn ghost small" data-act="hold" data-id="${esc(id)}" ${ready ? "" : "disabled"}>Put on hold</button></div>
+    ${other ? `<input type="text" id="ht-${k}" data-holdtext="${esc(id)}" maxlength="200" placeholder="Reason, in a few words…" value="${esc(S.holdText[id] || "")}">` : ""}</div>`;
 }
 
 function addForm(st, k) {
@@ -638,6 +672,19 @@ async function act(a, el) {
       delete S.statusSel[id]; delete S.noteText[id]; delete S.noteBy[id]; S.notice = `Status saved: ${status}.`; await load(); break;
     }
     case "copyledger": await copyLedger(); break;
+    case "hold": {
+      const sel = S.holdSel[id]; const reason = (sel === "Other…" ? (S.holdText[id] || "") : sel || "").trim();
+      if (!reason) { notice("Choose or type a reason first."); return; }
+      el.disabled = true;
+      const { error } = await sb.from("item_holds").upsert({ item_id: id, reason, set_at: new Date().toISOString() });
+      if (error) { el.disabled = false; notice("Couldn't put it on hold: " + error.message); return; }
+      delete S.holdSel[id]; delete S.holdText[id]; S.notice = `On hold: ${reason}.`; await load(); break;
+    }
+    case "unhold": {
+      const { error } = await sb.from("item_holds").delete().eq("item_id", id);
+      if (error) { notice("Couldn't change it: " + error.message); return; }
+      S.notice = "Moved back to Needs action."; await load(); break;
+    }
     case "againopen": S.again = !S.again; render(); break;
     case "copyagain": await copyAgain(el.dataset.at); break;
     case "markcopied": await markCopied(S.fallback.ids); S.fallback = null; render(); break;
@@ -723,10 +770,12 @@ document.addEventListener("input", e => {
   if (t.dataset.draft !== undefined) S.drafts[t.dataset.draft] = t.value;
   if (t.dataset.notetext !== undefined) S.noteText[t.dataset.notetext] = t.value;
   if (t.dataset.general !== undefined) S.general = t.value;
+  if (t.dataset.holdtext !== undefined) { const was = !!(S.holdText[t.dataset.holdtext] || "").trim(); S.holdText[t.dataset.holdtext] = t.value; if (was !== !!t.value.trim()) render(); }
 });
 document.addEventListener("change", e => {
   const t = e.target;
   if (t.dataset.statussel !== undefined) { S.statusSel[t.dataset.statussel] = t.value; render(); }
+  if (t.dataset.holdsel !== undefined) { S.holdSel[t.dataset.holdsel] = t.value; render(); }
   if (t.dataset.speaker !== undefined) { S.speaker[t.dataset.speaker] = t.value; render(); }
   if (t.dataset.noteby !== undefined) { S.noteBy[t.dataset.noteby] = t.value; render(); }
   if (t.dataset.pick !== undefined) {
