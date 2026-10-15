@@ -31,6 +31,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:18px/1.5 -apple-system,
 h1{font-size:1.5rem;margin:0;font-weight:700;letter-spacing:-.01em}
 h2{font-size:1.1rem;margin:0}
 h3{font-size:.85rem;margin:18px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+h3.course{font-size:1.2rem;color:var(--ink);text-transform:none;letter-spacing:-.005em;font-weight:700;margin:22px 0 10px;padding-left:10px;border-left:4px solid var(--accent)}
 a{color:var(--accent)}
 p{margin:0}
 .muted{color:var(--muted)}
@@ -50,8 +51,8 @@ p{margin:0}
 .card.followup{border-left-color:var(--fu)} .card.todo{border-left-color:var(--todo)}
 .card.college,.card.other{border-left-color:var(--accent)}
 .list{display:flex;flex-direction:column;gap:10px}
-.cls{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
-.name{font-size:1.05rem;overflow-wrap:anywhere}
+.cls{font-size:1.15rem;font-weight:700;color:var(--ink);line-height:1.3;overflow-wrap:anywhere}
+.name{font-size:1rem;color:var(--ink);overflow-wrap:anywhere}
 .name a{text-decoration:none}
 .meta{font-size:.92rem;color:var(--muted)}
 .detail{font-size:.95rem;overflow-wrap:anywhere}
@@ -310,7 +311,7 @@ function sectionView(st, k) {
   let html = "";
   if (MODE === "parent" && (k === "college" || k === "other")) html += addForm(st, k);
   if (!list.length) return html + `<p class="empty">None</p>`;
-  return html + groups(k, list).map(g => (g.title ? `<h3>${esc(g.title)}</h3>` : "") + `<div class="list">${g.items.map(card).join("")}</div>`).join("");
+  return html + groups(k, list).map(g => (g.title ? `<h3${g.course ? ' class="course"' : ""}>${esc(g.title)}</h3>` : "") + `<div class="list">${g.items.map(card).join("")}</div>`).join("");
 }
 
 function groups(k, list) {
@@ -329,7 +330,7 @@ function groups(k, list) {
   if (k === "mu" || k === "followup") {
     const st = list[0].student;
     return [...new Set(list.map(i => i.cls))].sort((a, b) => rank(st, a) - rank(st, b) || String(a).localeCompare(String(b)))
-      .map(c => ({ title: c, items: list.filter(i => i.cls === c).sort((a, b) => String(a.sort).localeCompare(String(b.sort)) || byName(a, b)) }));
+      .map(c => ({ title: c, course: true, items: list.filter(i => i.cls === c).sort((a, b) => String(a.sort).localeCompare(String(b.sort)) || byName(a, b)) }));
   }
   return [{ title: "", items: list.slice().sort((a, b) => String(a.sort).localeCompare(String(b.sort)) || byName(a, b)) }];
 }
