@@ -118,6 +118,8 @@ p{margin:0}
 .msgtools{float:right;display:inline-flex;gap:10px}
 .linkbtn{border:0;background:transparent;color:var(--accent);font:inherit;font-size:.78rem;font-weight:600;padding:0;cursor:pointer;text-decoration:underline}
 .msg.editing textarea{margin:4px 0 6px}
+.name a.itemlink{text-decoration:underline;text-underline-offset:3px}
+.linktag{display:inline-block;font-size:.72rem;font-weight:700;padding:1px 7px;border-radius:999px;border:1px solid var(--accent);color:var(--accent);text-decoration:none;white-space:nowrap;vertical-align:2px}
 .moveto{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .mlabel-always{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .moveto select,.moveto input{font-size:.88rem;padding:7px 8px}
@@ -495,9 +497,13 @@ function sectionBlock(st, k, list, withAdd) {
   return html + `</section>`;
 }
 
+// linked names are underlined and carry a small "Canvas ↗" tag (other sites say "Open ↗")
+function linkTag(url) { return /instructure\.com/i.test(url) ? "Canvas ↗" : "Open ↗"; }
 function nameHtml(i) {
-  const nm = i.link ? `<a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.name)}</a>` : esc(i.name);
-  return i.bold ? `<strong>${nm}</strong>` : nm;
+  if (!i.link) return i.bold ? `<strong>${esc(i.name)}</strong>` : esc(i.name);
+  const nm = `<a class="itemlink" href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.name)}</a>`;
+  const tag = `<a class="linktag" href="${esc(i.link)}" target="_blank" rel="noopener" aria-label="Open ${esc(i.name)} in ${linkTag(i.link) === "Canvas ↗" ? "Canvas" : "a new tab"}">${linkTag(i.link)}</a>`;
+  return (i.bold ? `<strong>${nm}</strong>` : nm) + " " + tag;
 }
 function stateBadge(i) {
   return i.section === "missing" ? `<span class="badge miss">🔴 Missing</span>` : i.section === "unknown" ? `<span class="badge unk">⚫ Unknown</span>` : "";
