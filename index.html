@@ -90,8 +90,26 @@ p{margin:0}
 .t-name{overflow-wrap:anywhere}
 .t-detail{display:block;font-size:.92rem;color:var(--muted)}
 .t-when{color:var(--muted);font-size:.95rem;white-space:nowrap}
+.badge{display:inline-block;font-weight:700;font-size:.85rem;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.badge.miss{background:var(--miss-soft);color:var(--miss)} .badge.unk{background:var(--unk-soft);color:var(--unk)}
+.c-state:empty{display:none}
+.mlabel{display:block;font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.c-due .mlabel{display:inline;margin-right:6px}
+.c-due{font-size:.95rem}
+.detail.sub{font-size:.88rem;color:var(--muted)}
+.c-item .chip{margin-top:4px}
+.c-next{display:flex;flex-direction:column;gap:6px}
+.next{font-weight:700}
+.next.auto{font-weight:400;font-style:italic;color:var(--muted)}
+.c-next select,.c-next input{font-size:.92rem;padding:8px 10px}
+.c-hist{display:flex;flex-direction:column;gap:8px}
+.card.row-follow{border-left-color:var(--fu)}
 @media (min-width:900px){
-  .wrap{max-width:1180px}
+  .wrap{max-width:1320px}
+  .mlabel{display:none !important}
+  .thead.th-new,.card.row-new:not(.addcard){grid-template-columns:170px minmax(0,1.1fr) 120px 80px minmax(0,1.8fr)}
+  .thead.th-follow,.card.row-follow:not(.addcard){grid-template-columns:150px minmax(0,1fr) 72px minmax(0,1.5fr) 170px minmax(0,1.3fr)}
+  .card.row-follow .c-hist{border-top:0;padding-top:0;margin-top:0}
   .thead{display:grid;grid-template-columns:190px minmax(0,1.1fr) 140px minmax(0,1.6fr);column-gap:18px;padding:0 15px 6px 19px;font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
   .card:not(.addcard){display:grid;grid-template-columns:190px minmax(0,1.1fr) 140px minmax(0,1.6fr);column-gap:18px;row-gap:8px;align-items:start}
   .card .c-due:empty{display:block}
@@ -165,8 +183,15 @@ const CLASS_ORDER = {
   Mckinley: ["Calculus", "AP Biology", "Physics in the Universe", "UW Psychology 101", "ENGL 131"],
   Kyan: ["Chemistry in Earth System", "Biotechnology I", "English 10", "Pre-Calculus", "World History 10"]
 };
-const SECTIONS = { Mckinley: ["todo", "mu", "followup", "college", "other"], Kyan: ["todo", "mu", "followup", "other"] };
-const SEC_LABEL = { todo: "📝 To Do", mu: "🔴 Missing & ⚫ Unknown", followup: "🔁 Follow Up", college: "🎓 College Apps", other: "🗂 Other" };
+// To Do is hidden for now (its items stay in the database). Missing & Unknown and On hold fold into these two.
+const SECTIONS = { Mckinley: ["new", "follow", "college", "other"], Kyan: ["new", "follow", "other"] };
+const SEC_LABEL = { todo: "📝 To Do", new: "🆕 New & Outstanding", follow: "🔁 Follow Up", college: "🎓 College Apps", other: "🗂 Other" };
+const SEC_HEADS = {
+  new: ["Course", "Assignment", "Status", "Due", "Messages"],
+  follow: ["Course", "Assignment", "Due", "Message history", "Next step", "Reply"],
+  college: ["Course", "Assignment", "Due", "Messages"], other: ["Course", "Assignment", "Due", "Messages"]
+};
+const NEXT_STEPS = ["Awaiting turn in", "Awaiting teacher", "Awaiting Skyward", "Awaiting Canvas", "Awaiting response"];
 const STATUSES = ["student says done", "I confirm done", "plan note", "status note", "settled: done", "excused", "no count"];
 const NOTE_STATUSES = ["plan note", "status note"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"];
@@ -234,7 +259,13 @@ const MIC_TIP = "Tip: tap the 🎤 on your keyboard to talk instead of type.";
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const br = s => esc(s).replace(/\n/g, "<br>");
 const rank = (st, c) => { const i = (CLASS_ORDER[st] || []).indexOf(c); return i < 0 ? 99 : i; };
-const secOf = i => (i.section === "missing" || i.section === "unknown") ? "mu" : i.section;
+// New & Outstanding = missing/unknown with no reply from the student yet. A reply (or a next step) moves it to Follow Up.
+const secOf = i => {
+  if (i.origin === "manual") return i.section;
+  if (i.section === "todo") return "todo";
+  if (i.section === "followup" || i.hold || threadOf(i.id).some(m => m.kind === "reply")) return "follow";
+  return "new";
+};
 const sid = id => String(id).replace(/[^A-Za-z0-9_-]/g, "_");
 function when(ts) {
   const d = new Date(ts); let h = d.getHours(); const ap = h < 12 ? "am" : "pm"; h = h % 12 || 12;
@@ -423,35 +454,73 @@ function sortBox(st) {
     }).join("")}</section>`;
 }
 
-// ---------- one page: every section ----------
-// To Do is a plain list laid out like the tracker summary (no replies there).
-// The other sections are a table with messages and an always-open reply box.
+// ---------- one page: New & Outstanding, Follow Up, then the hand-kept sections ----------
 function allView(st) {
-  const respondable = i => secOf(i) !== "todo";
-  const shown = itemsOf(st).filter(i => !S.review || (respondable(i) && needsReview(i.id)));
+  const shown = itemsOf(st).filter(i => secOf(i) !== "todo" && (!S.review || needsReview(i.id)));
   if (S.review && !shown.length) return `<p class="empty">Nothing waiting for review for ${esc(st)}.</p>`;
-  const act = shown.filter(i => respondable(i) && !i.hold);
-  const held = shown.filter(i => respondable(i) && i.hold);
-  const todo = shown.filter(i => !respondable(i));
-  const secs = SECTIONS[st].filter(k => k !== "todo");
-  let html = S.review ? "" : `<section class="sect"><h2 class="secth">${esc(SEC_LABEL.todo)} <span class="count">${todo.length}</span></h2>${todo.length ? todoList(todo) : `<p class="empty">None</p>`}</section>`;
-  html += `<section class="grp act"><h2 class="grph">⚡ ${MODE === "kid" ? "Needs your action" : "Needs action"} <span class="count">${act.length}</span></h2>`
-    + (act.length || (MODE === "parent" && !S.review) ? secs.map(k => sectionBlock(st, k, act.filter(i => secOf(i) === k), true)).join("") : `<p class="empty">Nothing right now.</p>`)
-    + `</section>`;
-  if (held.length) html += `<section class="grp hold"><h2 class="grph">⏸ On hold <span class="count">${held.length}</span></h2>
-    <p class="muted small">${MODE === "kid" ? "Waiting on something else first — the reason is on each item." : "Waiting on something else. A new message from you on an item moves it back to Needs action."}</p>`
-    + secs.map(k => sectionBlock(st, k, held.filter(i => secOf(i) === k), false)).join("") + `</section>`;
-  return html;
+  return SECTIONS[st].map(k => sectionBlock(st, k, shown.filter(i => secOf(i) === k), true)).join("");
 }
-// one section (Missing & Unknown, Follow Up, College Apps, Other) inside a group; empty sections are left out
 function sectionBlock(st, k, list, withAdd) {
-  const add = withAdd && MODE === "parent" && !S.review && (k === "college" || k === "other");
-  if (!list.length && !add) return "";
-  const thead = `<div class="thead" aria-hidden="true"><span>Course</span><span>Assignment</span><span>Due</span><span>Messages</span></div>`;
-  let html = `<div class="sect"><h3 class="sech">${esc(SEC_LABEL[k])} <span class="count">${list.length}</span></h3>`;
+  const handKept = k === "college" || k === "other";
+  const add = withAdd && MODE === "parent" && !S.review && handKept;
+  if (!list.length && !add && (handKept || S.review)) return "";
+  let html = `<section class="sect sec-${k}"><h2 class="grph">${esc(SEC_LABEL[k])} <span class="count">${list.length}</span></h2>`;
   if (add) html += addForm(st, k);
-  if (list.length) html += thead + groups(k, list).map(g => (g.title ? `<h3>${esc(g.title)}</h3>` : "") + `<div class="list">${g.items.map(card).join("")}</div>`).join("");
+  if (list.length) {
+    const row = k === "new" ? newRow : k === "follow" ? followRow : card;
+    html += `<div class="thead th-${k}" aria-hidden="true">${SEC_HEADS[k].map(h => `<span>${esc(h)}</span>`).join("")}</div>`
+      + `<div class="list">${groups(k, list)[0].items.map(row).join("")}</div>`;
+  } else if (!add) html += `<p class="empty">None right now.</p>`;
+  return html + `</section>`;
+}
+
+function nameHtml(i) {
+  const nm = i.link ? `<a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.name)}</a>` : esc(i.name);
+  return i.bold ? `<strong>${nm}</strong>` : nm;
+}
+function stateBadge(i) {
+  return i.section === "missing" ? `<span class="badge miss">🔴 Missing</span>` : i.section === "unknown" ? `<span class="badge unk">⚫ Unknown</span>` : "";
+}
+function itemCell(i) {
+  const rev = MODE === "parent" && needsReview(i.id) ? `<span class="chip rev">Needs review</span>` : "";
+  return `<div class="c-item"><div class="name">${nameHtml(i)}</div>${i.detail ? `<div class="detail sub">${br(i.detail)}</div>` : ""}${rev}</div>`;
+}
+const courseCell = i => `<div class="c-course"><div class="cls">${esc(i.cls || "—")}</div></div>`;
+const dueCell = i => `<div class="c-due"><span class="mlabel">Due</span>${i.due ? esc(i.due) : "—"}</div>`;
+function historyHtml(i) { const t = threadOf(i.id); return t.length ? t.map(msgView).join("") : `<p class="none">No messages yet</p>`; }
+const composerFor = i => MODE === "kid" ? kidComposer(i) : parentComposer(i);
+
+function newRow(i) {
+  const un = unreadOf(i.id);
+  return `<article class="card row-new ${i.section}" id="card-${sid(i.id)}">${courseCell(i)}${itemCell(i)}
+    <div class="c-state">${stateBadge(i)}</div>${dueCell(i)}
+    <div class="c-talk thread"${un && !PREVIEW ? ` data-unread="${esc(i.id)}"` : ""}>${historyHtml(i)}${composerFor(i)}</div></article>`;
+}
+
+// Next step: the one Mom chose (kept until she changes it), else a hint from the latest message
+function autoNext(i) {
+  const t = threadOf(i.id).filter(m => m.kind !== "status"); const last = t[t.length - 1];
+  if (!last) return "";
+  if (last.author === "parent") return MODE === "kid" ? "Waiting for your reply" : "Awaiting response";
+  return needsReview(i.id) ? (MODE === "kid" ? "Waiting for Mom" : "Your turn to respond") : "";
+}
+function nextCell(i) {
+  const chosen = i.hold; const shown = chosen ? (MODE === "kid" && chosen === "Awaiting response" ? "Waiting for your reply" : chosen) : autoNext(i);
+  let html = `<div class="c-next"><span class="mlabel">Next step</span><div class="next${chosen ? "" : " auto"}">${shown ? esc(shown) : "—"}</div>`;
+  if (MODE === "parent") {
+    const id = i.id, k = sid(id), sel = S.holdSel[id] || "";
+    html += `<select id="h-${k}" data-holdsel="${esc(id)}" aria-label="Next step for ${esc(i.name)}"><option value="">${chosen ? "Change…" : "Set next step…"}</option>${
+      [...NEXT_STEPS, "Other…"].map(r => `<option ${r === sel ? "selected" : ""}>${esc(r)}</option>`).join("")}${chosen ? `<option value="__clear">Clear (go back to automatic)</option>` : ""}</select>`;
+    if (sel === "Other…") html += `<input type="text" id="ht-${k}" data-holdtext="${esc(id)}" maxlength="200" placeholder="Next step, in a few words…" value="${esc(S.holdText[id] || "")}">
+      <button class="btn small" data-act="hold" data-id="${esc(id)}" ${(S.holdText[id] || "").trim() ? "" : "disabled"}>Save</button>`;
+  }
   return html + `</div>`;
+}
+function followRow(i) {
+  const un = unreadOf(i.id);
+  return `<article class="card row-follow" id="card-${sid(i.id)}">${courseCell(i)}${itemCell(i)}${dueCell(i)}
+    <div class="c-hist thread"${un && !PREVIEW ? ` data-unread="${esc(i.id)}"` : ""}><span class="mlabel">Message history</span>${historyHtml(i)}</div>
+    ${nextCell(i)}<div class="c-reply">${composerFor(i)}</div></article>`;
 }
 
 function todoLine(i, when) {
@@ -480,7 +549,7 @@ function groups(k, list) {
     if (und.length) out.push({ title: "Undated", items: und });
     return out;
   }
-  if (k === "mu" || k === "followup") return [{ title: "", items: list.slice().sort(byCourse) }];
+  if (k === "new" || k === "follow") return [{ title: "", items: list.slice().sort(byCourse) }];
   return [{ title: "", items: list.slice().sort((a, b) => String(a.sort).localeCompare(String(b.sort)) || byName(a, b)) }];
 }
 
@@ -527,7 +596,9 @@ function statusLine(m) {
 function msgView(m) {
   if (m.kind === "status") return `<div class="msg status">✔ ${statusLine(m)}<span class="who">— ${whoLabel(m.author)}, ${when(m.created_at)}</span></div>`;
   const cls = m.author === "parent" ? "parent" : "kid";
-  const isNew = MODE === "kid" && m.author === "parent" && !m.read_by_student_at;
+  const isNew = MODE === "kid" ? (m.author === "parent" && !m.read_by_student_at)
+    : (m.kind === "reply" && m.item_id && (m.entered_by !== "parent" || m.applied_from)
+       && !threadOf(m.item_id).some(x => x.author === "parent" && x.created_at > m.created_at));
   const hasClip = m.audio_path || m.has_audio;
   let clip = "";
   if (hasClip) {
@@ -581,7 +652,7 @@ function parentComposer(i) {
         <button class="btn ghost small" data-act="archive" data-id="${esc(id)}">Archive</button></div>`;
     }
   }
-  return html + holdBox(i);
+  return html;
 }
 
 const HOLD_REASONS = ["Talking to teacher", "Waiting for Skyward", "Waiting for Canvas"];
@@ -682,7 +753,7 @@ async function act(a, el) {
       el.disabled = true;
       const { error } = await sb.from("item_holds").upsert({ item_id: id, reason, set_at: new Date().toISOString() });
       if (error) { el.disabled = false; notice("Couldn't put it on hold: " + error.message); return; }
-      delete S.holdSel[id]; delete S.holdText[id]; S.notice = `On hold: ${reason}.`; await load(); break;
+      delete S.holdSel[id]; delete S.holdText[id]; S.notice = `Next step: ${reason}.`; await load(); break;
     }
     case "unhold": {
       const { error } = await sb.from("item_holds").delete().eq("item_id", id);
@@ -727,6 +798,14 @@ async function act(a, el) {
   }
 }
 
+async function setNext(id, v) {
+  delete S.holdSel[id]; delete S.holdText[id];
+  const { error } = v === "__clear"
+    ? await sb.from("item_holds").delete().eq("item_id", id)
+    : await sb.from("item_holds").upsert({ item_id: id, reason: v, set_at: new Date().toISOString() });
+  if (error) { notice("Couldn't save the next step: " + error.message); return; }
+  S.notice = v === "__clear" ? "Next step cleared." : `Next step: ${v}.`; await load();
+}
 async function copyLedger() {
   const items = byId(); const pending = ledgerPending(items, S.msgs);
   if (!pending.length) return;
@@ -779,7 +858,10 @@ document.addEventListener("input", e => {
 document.addEventListener("change", e => {
   const t = e.target;
   if (t.dataset.statussel !== undefined) { S.statusSel[t.dataset.statussel] = t.value; render(); }
-  if (t.dataset.holdsel !== undefined) { S.holdSel[t.dataset.holdsel] = t.value; render(); }
+  if (t.dataset.holdsel !== undefined) {
+    const id = t.dataset.holdsel, v = t.value;
+    if (v && v !== "Other…") setNext(id, v); else { S.holdSel[id] = v; render(); }
+  }
   if (t.dataset.speaker !== undefined) { S.speaker[t.dataset.speaker] = t.value; render(); }
   if (t.dataset.noteby !== undefined) { S.noteBy[t.dataset.noteby] = t.value; render(); }
   if (t.dataset.pick !== undefined) {
