@@ -104,6 +104,17 @@ p{margin:0}
 .c-next select,.c-next input{font-size:.92rem;padding:8px 10px}
 .c-hist{display:flex;flex-direction:column;gap:8px}
 .card.row-follow{border-left-color:var(--fu)}
+.sect.sec-new,.sect.sec-follow{border-radius:16px;padding:14px 14px 16px;border:2px solid}
+.sect.sec-new{background:var(--miss-soft);border-color:var(--miss)}
+.sect.sec-follow{background:var(--fu-soft);border-color:var(--fu)}
+.sec-new>.grph{color:var(--miss)} .sec-follow>.grph{color:var(--fu)}
+.sec-new>.grph,.sec-follow>.grph{font-size:1.45rem;margin:0}
+.secblurb{font-size:.92rem;color:var(--muted);margin:2px 0 12px}
+.sec-new .thead,.sec-follow .thead{color:var(--ink);opacity:.7}
+.edited{font-weight:400;font-style:italic}
+.msgtools{float:right;display:inline-flex;gap:10px}
+.linkbtn{border:0;background:transparent;color:var(--accent);font:inherit;font-size:.78rem;font-weight:600;padding:0;cursor:pointer;text-decoration:underline}
+.msg.editing textarea{margin:4px 0 6px}
 @media (min-width:900px){
   .wrap{max-width:1320px}
   .mlabel{display:none !important}
@@ -251,7 +262,7 @@ const ls = {
 const S = {
   phase: "loading", items: [], msgs: [], student: STUDENTS.includes(ls.get("hub-student")) ? ls.get("hub-student") : "Kyan",
   open: new Set(), review: false, drafts: {}, notice: "", general: "", applySel: {},
-  again: false, holdSel: {}, holdText: {}, statusSel: {}, noteText: {}, noteBy: {}, speaker: {}, editing: null, adding: null, clipUrls: {}, fallback: null, session: null, err: ""
+  again: false, holdSel: {}, holdText: {}, statusSel: {}, noteText: {}, noteBy: {}, speaker: {}, editing: null, editMsg: null, editText: "", adding: null, clipUrls: {}, fallback: null, session: null, err: ""
 };
 const MIC_TIP = "Tip: tap the 🎤 on your keyboard to talk instead of type.";
 
@@ -464,7 +475,9 @@ function sectionBlock(st, k, list, withAdd) {
   const handKept = k === "college" || k === "other";
   const add = withAdd && MODE === "parent" && !S.review && handKept;
   if (!list.length && !add && (handKept || S.review)) return "";
-  let html = `<section class="sect sec-${k}"><h2 class="grph">${esc(SEC_LABEL[k])} <span class="count">${list.length}</span></h2>`;
+  const blurb = { new: MODE === "kid" ? "Missing or unknown — reply to tell Mom where it stands." : "Missing or unknown, with no reply from the student yet.",
+    follow: MODE === "kid" ? "You've replied. The Next step shows what it's waiting on." : "The student has replied, or there's a Next step. Track it to the finish." }[k];
+  let html = `<section class="sect sec-${k}"><h2 class="grph">${esc(SEC_LABEL[k])} <span class="count">${list.length}</span></h2>${blurb ? `<p class="secblurb">${esc(blurb)}</p>` : ""}`;
   if (add) html += addForm(st, k);
   if (list.length) {
     const row = k === "new" ? newRow : k === "follow" ? followRow : card;
@@ -483,7 +496,7 @@ function stateBadge(i) {
 }
 function itemCell(i) {
   const rev = MODE === "parent" && needsReview(i.id) ? `<span class="chip rev">Needs review</span>` : "";
-  return `<div class="c-item"><div class="name">${nameHtml(i)}</div>${i.detail ? `<div class="detail sub">${br(i.detail)}</div>` : ""}${rev}</div>`;
+  return `<div class="c-item"><div class="name">${nameHtml(i)}</div>${rev}</div>`;
 }
 const courseCell = i => `<div class="c-course"><div class="cls">${esc(i.cls || "—")}</div></div>`;
 const dueCell = i => `<div class="c-due"><span class="mlabel">Due</span>${i.due ? esc(i.due) : "—"}</div>`;
@@ -605,7 +618,15 @@ function msgView(m) {
     clip = MODE === "parent" ? `<audio controls preload="none" id="clip-${m.id}"></audio>` : `<div class="tx">🎙 Voice reply sent</div>`;
     clip += `<div class="tx">Transcript: ${m.transcript ? esc(m.transcript) : "<em>no transcript</em>"}</div>`;
   }
-  return `<div class="msg ${cls}"><span class="who">${isNew ? '<span class="newtag">New</span> ' : ""}${m.kind === "reply" ? replyLabel(m) : whoLabel(m.author)} · ${when(m.created_at)}</span>${m.body ? br(m.body) : ""}${clip}</div>`;
+  const mine = MODE === "parent" && m.author === "parent" && m.kind === "message";
+  const edited = m.edited_at ? ` <span class="edited">(edited)</span>` : "";
+  if (mine && S.editMsg === m.id) {
+    return `<div class="msg parent editing"><span class="who">Editing your message</span>
+      <textarea id="em-${m.id}" data-editmsg="${esc(m.id)}" rows="2" aria-label="Edit your message">${esc(S.editText)}</textarea>
+      <div class="row"><button class="btn small" data-act="msgsave" data-id="${esc(m.id)}">Save</button><button class="btn ghost small" data-act="msgcancel">Cancel</button></div></div>`;
+  }
+  const tools = mine ? `<span class="msgtools"><button class="linkbtn" data-act="msgedit" data-id="${esc(m.id)}">Edit</button><button class="linkbtn" data-act="msgdel" data-id="${esc(m.id)}">Remove</button></span>` : "";
+  return `<div class="msg ${cls}"><span class="who">${isNew ? '<span class="newtag">New</span> ' : ""}${m.kind === "reply" ? replyLabel(m) : whoLabel(m.author)} · ${when(m.created_at)}${edited}${tools}</span>${m.body ? br(m.body) : ""}${clip}</div>`;
 }
 
 function kidComposer(i) {
@@ -747,6 +768,24 @@ async function act(a, el) {
       delete S.statusSel[id]; delete S.noteText[id]; delete S.noteBy[id]; S.notice = `Status saved: ${status}.`; await load(); break;
     }
     case "copyledger": await copyLedger(); break;
+    case "msgedit": { const m = S.msgs.find(x => x.id === id); if (!m) return; S.editMsg = id; S.editText = m.body || ""; render(); break; }
+    case "msgcancel": S.editMsg = null; S.editText = ""; render(); break;
+    case "msgsave": {
+      const body = (S.editText || "").trim(); if (!body) { notice("A message can't be empty. Use Remove instead."); return; }
+      el.disabled = true;
+      // an edited message shows "New" to the student again
+      const { error } = await sb.from("messages").update({ body, edited_at: new Date().toISOString(), read_by_student_at: null })
+        .eq("id", id).eq("author", "parent").eq("kind", "message");
+      if (error) { el.disabled = false; notice("Couldn't save the edit: " + error.message); return; }
+      S.editMsg = null; S.editText = ""; S.notice = "Message updated."; await load(); break;
+    }
+    case "msgdel": {
+      if (!confirm("Remove this message? The student won't see it anymore.")) return;
+      const { error } = await sb.from("messages").delete().eq("id", id).eq("author", "parent").eq("kind", "message");
+      if (error) { notice("Couldn't remove it: " + error.message); return; }
+      if (S.editMsg === id) { S.editMsg = null; S.editText = ""; }
+      S.notice = "Message removed."; await load(); break;
+    }
     case "hold": {
       const sel = S.holdSel[id]; const reason = (sel === "Other…" ? (S.holdText[id] || "") : sel || "").trim();
       if (!reason) { notice("Choose or type a reason first."); return; }
@@ -853,6 +892,7 @@ document.addEventListener("input", e => {
   if (t.dataset.draft !== undefined) S.drafts[t.dataset.draft] = t.value;
   if (t.dataset.notetext !== undefined) S.noteText[t.dataset.notetext] = t.value;
   if (t.dataset.general !== undefined) S.general = t.value;
+  if (t.dataset.editmsg !== undefined) S.editText = t.value;
   if (t.dataset.holdtext !== undefined) { const was = !!(S.holdText[t.dataset.holdtext] || "").trim(); S.holdText[t.dataset.holdtext] = t.value; if (was !== !!t.value.trim()) render(); }
 });
 document.addEventListener("change", e => {
