@@ -67,8 +67,7 @@ p{margin:0}
 .pick label{display:flex;gap:10px;align-items:flex-start;font-size:.98rem;padding:6px 8px;border-radius:8px;background:var(--bg);cursor:pointer;min-height:44px}
 .pick input{width:22px;height:22px;flex:none;margin-top:2px;accent-color:var(--accent)}
 .thead{display:none}
-.grp{display:flex;flex-direction:column;gap:6px;padding-left:12px;border-left:4px solid var(--accent)}
-.grp.hold{border-left-color:var(--unk);opacity:.97}
+.grp{display:flex;flex-direction:column;gap:6px}
 .grph{font-size:1.4rem;margin:0 0 4px}
 .sech{font-size:1.05rem;color:var(--ink);text-transform:none;letter-spacing:0;font-weight:700;margin:14px 0 8px}
 .chip.holdchip{background:var(--unk-soft);color:var(--unk);margin-top:4px}
@@ -432,10 +431,10 @@ function allView(st) {
   const held = shown.filter(i => respondable(i) && i.hold);
   const todo = shown.filter(i => !respondable(i));
   const secs = SECTIONS[st].filter(k => k !== "todo");
-  let html = `<section class="grp act"><h2 class="grph">⚡ ${MODE === "kid" ? "Needs your action" : "Needs action"} <span class="count">${act.length}</span></h2>`
+  let html = S.review ? "" : `<section class="sect"><h2 class="secth">${esc(SEC_LABEL.todo)} <span class="count">${todo.length}</span></h2>${todo.length ? todoList(todo) : `<p class="empty">None</p>`}</section>`;
+  html += `<section class="grp act"><h2 class="grph">⚡ ${MODE === "kid" ? "Needs your action" : "Needs action"} <span class="count">${act.length}</span></h2>`
     + (act.length || (MODE === "parent" && !S.review) ? secs.map(k => sectionBlock(st, k, act.filter(i => secOf(i) === k), true)).join("") : `<p class="empty">Nothing right now.</p>`)
     + `</section>`;
-  if (!S.review) html += `<section class="sect"><h2 class="secth">${esc(SEC_LABEL.todo)} <span class="count">${todo.length}</span></h2>${todo.length ? todoList(todo) : `<p class="empty">None</p>`}</section>`;
   if (held.length) html += `<section class="grp hold"><h2 class="grph">⏸ On hold <span class="count">${held.length}</span></h2>
     <p class="muted small">${MODE === "kid" ? "Waiting on something else first — the reason is on each item." : "Waiting on something else. A new message from you on an item moves it back to Needs action."}</p>`
     + secs.map(k => sectionBlock(st, k, held.filter(i => secOf(i) === k), false)).join("") + `</section>`;
