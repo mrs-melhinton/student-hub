@@ -261,7 +261,10 @@ function needsReview(id) {
   const s = t.filter(m => m.kind === "status");
   return !s.length || r[r.length - 1].created_at > s[s.length - 1].created_at;
 }
-const itemsOf = st => S.items.filter(i => live(i) && i.student === st);
+// latest status Mom set on an item (null if none)
+function lastStatus(id) { const s = threadOf(id).filter(m => m.kind === "status"); return s.length ? s[s.length - 1].status : null; }
+// kids don't see an item once its latest status is "excused"; my view still shows it until the hub refresh
+const itemsOf = st => S.items.filter(i => live(i) && i.student === st && !(MODE === "kid" && lastStatus(i.id) === "excused"));
 function notice(t) { S.notice = t; render(); }
 function byId() { const o = {}; S.items.forEach(i => { o[i.id] = i; }); return o; }
 
@@ -321,7 +324,8 @@ let obs = null; const seenTimers = {};
 function watchUnread() {
   if (obs) obs.disconnect();
   Object.keys(seenTimers).forEach(k => { clearTimeout(seenTimers[k]); delete seenTimers[k]; });
-  if (PREVIEW || !("IntersectionObserver" in window)) return;
+  // kids: "New" stays until they send a reply on that item (see the "send" action)
+  if (PREVIEW || MODE === "kid" || !("IntersectionObserver" in window)) return;
   obs = new IntersectionObserver(es => es.forEach(e => {
     const id = e.target.dataset.unread;
     if (e.isIntersecting) { if (!seenTimers[id]) seenTimers[id] = setTimeout(() => { delete seenTimers[id]; markRead(id, true); }, 2000); }
@@ -615,6 +619,7 @@ async function act(a, el) {
       el.disabled = true;
       const { error } = await sb.rpc("kid_reply", { p_token: TOKEN, p_item_id: id, p_author: S.student.toLowerCase(), p_body: body });
       if (error) { el.disabled = false; notice("Couldn't send: " + error.message); return; }
+      if (!PREVIEW) await sb.rpc("kid_mark_read", { p_token: TOKEN, p_item_id: id });
       S.drafts[id] = ""; S.notice = "Sent."; await load(); break;
     }
     case "gsend": {
