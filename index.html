@@ -75,6 +75,11 @@ p{margin:0}
 .holdbox.row{flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between}
 .again{gap:6px}
 .again-row{justify-content:space-between;border-top:1px solid var(--line);padding-top:6px}
+.schools{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:12px}
+.schools-h{font-weight:700;margin-bottom:6px}
+.schools ol{margin:0;padding-left:1.4em;columns:2;column-gap:28px}
+.schools li{padding:2px 0}
+@media (max-width:560px){.schools ol{columns:1}}
 .decide{background:var(--accent-soft);border:2px solid var(--accent);border-radius:14px;padding:14px 16px;font-size:1.15rem;line-height:1.4;display:flex;flex-direction:column;gap:6px}
 .decide p{margin:0}
 .stickybox{position:sticky;top:0;z-index:20;background:var(--card);border:2px solid var(--accent);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
@@ -222,7 +227,7 @@ const SEC_LABEL = { todo: "📝 To Do", new: "⏰ Deadline Has Passed", follow: 
 const SEC_HEADS = {
   new: ["Course", "Assignment", "Status", "Due", "Messages"],
   follow: ["Course", "Assignment", "Due", "Message history", "Next step", "Reply"],
-  college: ["Course", "Assignment", "Due", "Messages"], other: ["Course", "Assignment", "Due", "Messages"],
+  college: ["Area", "Task", "Due", "Messages"], other: ["Course", "Assignment", "Due", "Messages"],
   resolved: ["Course", "Assignment", "Due", "Message history", "Status / reply"]
 };
 const NEXT_STEPS = ["Awaiting turn in", "Awaiting teacher", "Awaiting Skyward", "Awaiting Canvas", "Awaiting response from student"];
@@ -521,6 +526,14 @@ function allView(st) {
   return SECTIONS[st].map(k => sectionBlock(st, k, shown.filter(i => secOf(i) === k), true)).filter(Boolean)
     .join(`<div class="secdivider" role="separator" aria-hidden="true"></div>`);
 }
+// Mckinley's Nov 1 schools, listed at the top of College Apps
+const NOV1_SCHOOLS = ["Chapman University", "Seattle University", "University of Oregon", "Western Washington University",
+  "Santa Clara University", "Loyola Marymount University", "University of San Diego", "Northeastern University", "USC",
+  "University of Chicago (due Nov 2)"];
+function schoolList() {
+  return `<div class="schools"><div class="schools-h">Nov 1 schools — use these 10 for every task below</div>
+    <ol>${NOV1_SCHOOLS.map(n => `<li>${esc(n)}</li>`).join("")}</ol></div>`;
+}
 function sectionBlock(st, k, list, withAdd) {
   const handKept = k === "college" || k === "other" || k === "resolved";
   const add = withAdd && MODE === "parent" && !S.review && (k === "college" || k === "other");
@@ -529,6 +542,7 @@ function sectionBlock(st, k, list, withAdd) {
     follow: MODE === "kid" ? "Deadline has passed, and action is currently being taken. The Next step shows what it's waiting on." : "The student has replied, or there's a Next step. Track it to the finish.",
     resolved: "Excused or No Count — already off the student's page. Leaves here after the next hub refresh. Pick another status to bring it back." }[k];
   let html = `<section class="sect sec-${k}"><h2 class="grph">${esc(SEC_LABEL[k])} <span class="count">${list.length}</span></h2>${blurb ? `<p class="secblurb">${esc(blurb)}</p>` : ""}`;
+  if (k === "college") html += schoolList();
   if (add) html += addForm(st, k);
   if (list.length) {
     const row = k === "new" ? newRow : k === "follow" ? followRow : k === "resolved" ? resolvedRow : card;
