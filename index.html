@@ -540,7 +540,7 @@ function nameHtml(i) {
 }
 function stateBadge(i) {
   return i.section === "missing" ? `<span class="badge miss">🔴 Missing</span>` : i.section === "unknown" ? `<span class="badge unk">⚫ Unknown</span>`
-    : i.section === "followup" ? `<span class="badge fu">🔁 Tracker follow-up</span>` : "";
+    : i.section === "followup" ? `<span class="badge fu">🔁 ${MODE === "kid" ? "Follow Up Needed" : "Tracker follow-up"}</span>` : "";
 }
 function itemCell(i) {
   const rev = MODE === "parent" && needsReview(i.id) ? `<span class="chip rev">Needs review</span>` : "";
