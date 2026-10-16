@@ -84,6 +84,10 @@ p{margin:0}
 .chkbox{width:24px;height:24px;flex:none;margin-top:1px;accent-color:var(--fu);cursor:pointer}
 .card.checked .chkrow .name{text-decoration:line-through;color:var(--muted)}
 .chkline{font-size:.85rem;font-weight:600;color:var(--fu);margin-top:6px}
+.thumbs{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}
+.thumbbtn{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:2px 10px;font:inherit;font-size:.85rem;cursor:pointer;min-height:28px}
+.thumbbtn[aria-pressed="true"]{background:var(--fu-soft);border-color:var(--fu);color:var(--fu);font-weight:600}
+.thumbtag{font-size:.82rem;font-weight:600;color:var(--fu);background:var(--fu-soft);border-radius:999px;padding:2px 9px}
 .decide{background:var(--accent-soft);border:2px solid var(--accent);border-radius:14px;padding:14px 16px;font-size:1.15rem;line-height:1.4;display:flex;flex-direction:column;gap:6px}
 .decide p{margin:0}
 .stickybox{position:sticky;top:0;z-index:20;background:var(--card);border:2px solid var(--accent);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
@@ -342,10 +346,24 @@ const copiesOf = gid => S.msgs.filter(m => m.applied_from === gid && m.item_id);
 function unreadOf(id) {
   return threadOf(id).filter(m => MODE === "kid" ? (m.author === "parent" && !m.read_by_student_at) : (m.kind === "reply" && !m.read_by_parent_at)).length;
 }
+// 👍 quick acknowledgments: who thumbed up a message
+const thumbed = (m, who) => (m.thumbs || []).includes(who);
+const meReactor = () => MODE === "kid" ? S.student.toLowerCase() : "parent";
+function thumbsHtml(m) {
+  if (m.removed_at || !m.item_id) return "";
+  const canThumb = MODE === "kid" ? m.author === "parent" : (m.kind === "reply" && m.author !== "parent");
+  const others = (m.thumbs || []).filter(w => w !== meReactor());
+  const shown = others.map(w => `<span class="thumbtag">👍 ${esc(whoLabel(w))}</span>`).join("");
+  if (!canThumb) return shown ? `<div class="thumbs">${shown}</div>` : "";
+  const on = thumbed(m, meReactor());
+  const btn = `<button class="thumbbtn" data-act="thumb" data-id="${esc(m.id)}" aria-pressed="${on}"${PREVIEW ? " disabled" : ""} aria-label="${on ? "Remove thumbs up" : "Thumbs up"}">👍${on ? " You" : ""}</button>`;
+  return `<div class="thumbs">${btn}${shown}</div>`;
+}
 function lastReply(id) { const r = threadOf(id).filter(m => m.kind === "reply"); return r[r.length - 1] || null; }
 function needsReview(id) {
   // replies Melissa typed in herself don't need her review; replies she sorted onto this item do
   const t = threadOf(id); const r = t.filter(m => m.kind === "reply" && (m.entered_by !== "parent" || m.applied_from)); if (!r.length) return false;
+  if (thumbed(r[r.length - 1], "parent")) return false;
   const s = t.filter(m => m.kind === "status");
   return !s.length || r[r.length - 1].created_at > s[s.length - 1].created_at;
 }
@@ -367,8 +385,8 @@ async function load() {
       if (e) { S.phase = /invalid family link/i.test(e.message || "") ? "badlink" : "error"; S.err = e.message || ""; render(); return; }
       S.items = a.data || []; S.msgs = b.data || [];
     } else {
-      const [a, b, h, pl, ck] = await Promise.all([sb.from("items").select("*"), sb.from("messages").select("*").order("created_at"), sb.from("item_holds").select("*"), sb.from("item_place").select("*"), sb.from("item_checks").select("*")]);
-      const e = a.error || b.error || h.error || pl.error || ck.error;
+      const [a, b, h, pl, ck, rx] = await Promise.all([sb.from("items").select("*"), sb.from("messages").select("*").order("created_at"), sb.from("item_holds").select("*"), sb.from("item_place").select("*"), sb.from("item_checks").select("*"), sb.from("message_reactions").select("*")]);
+      const e = a.error || b.error || h.error || pl.error || ck.error || rx.error;
       if (e) { S.phase = "error"; S.err = e.message || ""; render(); return; }
       if (!a.data.length) { S.phase = "notparent"; render(); return; }
       const holds = {}; (h.data || []).forEach(x => { holds[x.item_id] = x; });
@@ -377,6 +395,8 @@ async function load() {
       a.data.forEach(i => { const x = holds[i.id]; i.hold = x ? x.reason : null; i.hold_at = x ? x.set_at : null;
         const q = places[i.id]; i.place = q ? q.place : null; i.place_at = q ? q.set_at : null;
         const c = checks[i.id]; i.checked_by = c ? c.checked_by : null; i.checked_at = c ? c.checked_at : null; });
+      const th = {}; (rx.data || []).forEach(x => { (th[x.message_id] = th[x.message_id] || []).push(x.reactor); });
+      b.data.forEach(m => { m.thumbs = th[m.id] || []; });
       S.items = a.data; S.msgs = b.data;
     }
     S.phase = "ready";
@@ -697,11 +717,11 @@ function statusLine(m) {
     "settled: done": "Resolved", "excused": "Excused", "no count": "No count" }[m.status] || esc(m.status)) + note;
 }
 function msgView(m) {
-  if (m.kind === "status") return `<div class="msg status">✔ ${statusLine(m)}<span class="who">— ${whoLabel(m.author)}, ${when(m.created_at)}</span></div>`;
+  if (m.kind === "status") return `<div class="msg status">✔ ${statusLine(m)}<span class="who">— ${whoLabel(m.author)}, ${when(m.created_at)}</span>${thumbsHtml(m)}</div>`;
   const cls = m.author === "parent" ? "parent" : "kid";
-  const isNew = MODE === "kid" ? (m.author === "parent" && !m.read_by_student_at)
+  const isNew = MODE === "kid" ? (m.author === "parent" && !m.read_by_student_at && !thumbed(m, meReactor()))
     : (m.kind === "reply" && m.item_id && (m.entered_by !== "parent" || m.applied_from)
-       && !liveThread(m.item_id).some(x => x.author === "parent" && x.created_at > m.created_at));
+       && !thumbed(m, "parent") && !liveThread(m.item_id).some(x => x.author === "parent" && x.created_at > m.created_at));
   const hasClip = m.audio_path || m.has_audio;
   let clip = "";
   if (hasClip) {
@@ -720,7 +740,7 @@ function msgView(m) {
       <div class="row"><button class="btn small" data-act="msgsave" data-id="${esc(m.id)}">Save</button><button class="btn ghost small" data-act="msgcancel">Cancel</button></div></div>`;
   }
   const tools = mine ? `<span class="msgtools"><button class="linkbtn" data-act="msgedit" data-id="${esc(m.id)}">Edit</button><button class="linkbtn" data-act="msgdel" data-id="${esc(m.id)}">Remove</button></span>` : "";
-  return `<div class="msg ${cls}"><span class="who">${isNew ? '<span class="newtag">New</span> ' : ""}${m.kind === "reply" ? replyLabel(m) : whoLabel(m.author)} · ${when(m.created_at)}${edited}${tools}</span>${m.body ? br(m.body) : ""}${photoHtml(m)}${clip}</div>`;
+  return `<div class="msg ${cls}"><span class="who">${isNew ? '<span class="newtag">New</span> ' : ""}${m.kind === "reply" ? replyLabel(m) : whoLabel(m.author)} · ${when(m.created_at)}${edited}${tools}</span>${m.body ? br(m.body) : ""}${photoHtml(m)}${clip}${thumbsHtml(m)}</div>`;
 }
 
 // ---------- photos on messages ----------
@@ -872,6 +892,16 @@ async function act(a, el) {
   const id = el.dataset.id;
   switch (a) {
     case "dismiss": S.notice = ""; render(); break;
+    case "thumb": {
+      const m = S.msgs.find(x => x.id === id); if (!m) return;
+      const on = !thumbed(m, meReactor()); el.disabled = true;
+      const { error } = MODE === "kid"
+        ? await sb.rpc("kid_react", { p_token: TOKEN, p_message_id: id, p_author: S.student.toLowerCase(), p_on: on })
+        : on ? await sb.from("message_reactions").insert({ message_id: id, reactor: "parent" })
+             : await sb.from("message_reactions").delete().eq("message_id", id).eq("reactor", "parent");
+      if (error) { el.disabled = false; notice("Couldn't save the thumbs up: " + error.message); return; }
+      await load(); break;
+    }
     case "refresh": S.notice = ""; await load(); break;
     case "sw": S.student = el.dataset.st; ls.set("hub-student", S.student); S.adding = null; S.editing = null; render(); if (MODE === "parent") loadClips(); break;
     case "review": S.review = !S.review; render(); break;
