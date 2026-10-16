@@ -223,7 +223,7 @@ const SEC_HEADS = {
   college: ["Course", "Assignment", "Due", "Messages"], other: ["Course", "Assignment", "Due", "Messages"],
   resolved: ["Course", "Assignment", "Due", "Message history", "Status / reply"]
 };
-const NEXT_STEPS = ["Awaiting turn in", "Awaiting teacher", "Awaiting Skyward", "Awaiting Canvas", "Awaiting response"];
+const NEXT_STEPS = ["Awaiting turn in", "Awaiting teacher", "Awaiting Skyward", "Awaiting Canvas", "Awaiting response from student"];
 const STATUSES = ["student says done", "I confirm done", "plan note", "status note", "settled: done", "excused", "no count"];
 const NOTE_STATUSES = ["plan note", "status note"];
 // what the dropdown and history call each status. The stored value stays the same, so
@@ -293,7 +293,7 @@ const S = {
   open: new Set(), review: false, drafts: {}, notice: "", general: "", applySel: {},
   again: false, holdSel: {}, holdText: {}, statusSel: {}, noteText: {}, noteBy: {}, speaker: {}, editing: null, editMsg: null, editText: "", adding: null, clipUrls: {}, photos: {}, imgUrls: {}, fallback: null, session: null, err: ""
 };
-const MIC_TIP = "Tip: tap the 🎤 on your keyboard to talk instead of type.";
+const MIC_TIP = "You can also talk to text your response.";
 
 // ---------- helpers ----------
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -559,14 +559,18 @@ function newRow(i) {
 }
 
 // Next step: the one Mom chose (kept until she changes it), else a hint from the latest message
+// Default when no Next step is picked: the student's latest reply has no answer from Mom yet
+// (no message or status after it) → waiting on Mom; anything else → waiting on the student.
 function autoNext(i) {
   const t = liveThread(i.id).filter(m => m.kind !== "status"); const last = t[t.length - 1];
-  if (!last) return "";
-  if (last.author === "parent") return MODE === "kid" ? "Waiting for your reply" : "Awaiting response";
-  return needsReview(i.id) ? (MODE === "kid" ? "Waiting for Mom" : "Your turn to respond") : "";
+  const onParent = last && last.author !== "parent" && needsReview(i.id);
+  if (onParent) return MODE === "kid" ? "Waiting for Mom" : "Awaiting response from parent";
+  return MODE === "kid" ? "Waiting for your reply" : "Awaiting response from student";
 }
+const nextLabel = h => (h === "Awaiting response" ? "Awaiting response from student" : h);
 function nextCell(i) {
-  const chosen = i.hold; const shown = chosen ? (MODE === "kid" && chosen === "Awaiting response" ? "Waiting for your reply" : chosen) : autoNext(i);
+  const chosen = i.hold ? nextLabel(i.hold) : null;
+  const shown = chosen ? (MODE === "kid" && chosen === "Awaiting response from student" ? "Waiting for your reply" : chosen) : autoNext(i);
   let html = `<div class="c-next"><span class="mlabel">Next step</span><div class="next${chosen ? "" : " auto"}">${shown ? esc(shown) : "—"}</div>`;
   if (MODE === "parent") html += nextPicker(i, chosen ? "Change…" : "Set next step…")
     + `<button class="btn ghost small backbtn" data-act="tonew" data-id="${esc(i.id)}">↩ Move back to New &amp; Outstanding</button>`;
