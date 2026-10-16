@@ -66,7 +66,8 @@ p{margin:0}
 .pick legend{font-size:.85rem;font-weight:600;color:var(--muted);margin-bottom:4px}
 .pick label{display:flex;gap:10px;align-items:flex-start;font-size:.98rem;padding:6px 8px;border-radius:8px;background:var(--bg);cursor:pointer;min-height:44px}
 .pick input{width:22px;height:22px;flex:none;margin-top:2px;accent-color:var(--accent)}
-.thead{display:none}
+.thead{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin:0 0 8px;font-size:.8rem;font-weight:600;color:var(--muted)}
+.thead>span:not(.hf){display:none}
 .grp{display:flex;flex-direction:column;gap:6px}
 .grph{font-size:1.4rem;margin:0 0 4px}
 .sech{font-size:1.05rem;color:var(--ink);text-transform:none;letter-spacing:0;font-weight:700;margin:14px 0 8px}
@@ -88,9 +89,10 @@ p{margin:0}
 .thumbbtn{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:2px 10px;font:inherit;font-size:.85rem;cursor:pointer;min-height:28px}
 .thumbbtn[aria-pressed="true"]{background:var(--fu-soft);border-color:var(--fu);color:var(--fu);font-weight:600}
 .thumbtag{font-size:.82rem;font-weight:600;color:var(--fu);background:var(--fu-soft);border-radius:999px;padding:2px 9px}
-.filtbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
-.filtbar label{font-weight:700}
-.filtbar select{font:inherit;padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);max-width:100%}
+.hf{display:flex;flex-direction:column;gap:2px;min-width:0}
+.hf select{font:inherit;font-size:.78rem;text-transform:none;letter-spacing:0;font-weight:600;padding:2px 6px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);max-width:100%;cursor:pointer}
+.hf.on select{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.hf-clear{grid-column:1/-1;justify-self:start;text-transform:none;letter-spacing:0}
 .chip.waitflag{background:#fdf0d5;color:#8a5a00;border:1px solid #e8b44c;font-weight:700}
 @media (prefers-color-scheme:dark){.chip.waitflag{background:#3a2c10;color:#f2c56b;border-color:#8a6414}}
 .decide{background:var(--accent-soft);border:2px solid var(--accent);border-radius:14px;padding:14px 16px;font-size:1.15rem;line-height:1.4;display:flex;flex-direction:column;gap:6px}
@@ -161,6 +163,7 @@ p{margin:0}
   .thead.th-follow,.card.row-follow:not(.addcard){grid-template-columns:150px minmax(0,1fr) 72px minmax(0,1.5fr) 170px minmax(0,1.3fr)}
   .card.row-follow .c-hist,.card.row-resolved .c-hist{border-top:0;padding-top:0;margin-top:0}
   .thead.th-resolved,.card.row-resolved:not(.addcard){grid-template-columns:150px minmax(0,1fr) 72px minmax(0,1.6fr) minmax(0,1.4fr)}
+  .thead>span:not(.hf){display:block}
   .thead{display:grid;grid-template-columns:190px minmax(0,1.1fr) 140px minmax(0,1.6fr);column-gap:18px;padding:0 15px 6px 19px;font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
   .card:not(.addcard){display:grid;grid-template-columns:190px minmax(0,1.1fr) 140px minmax(0,1.6fr);column-gap:18px;row-gap:8px;align-items:start}
   .card .c-due:empty{display:block}
@@ -311,7 +314,7 @@ const ls = {
 const S = {
   phase: "loading", items: [], msgs: [], student: STUDENTS.includes(ls.get("hub-student")) ? ls.get("hub-student") : "Kyan",
   open: new Set(), review: false, drafts: {}, notice: "", general: "", applySel: {},
-  again: false, holdSel: {}, holdText: {}, statusSel: {}, noteText: {}, noteBy: {}, speaker: {}, filt: "", editing: null, editMsg: null, editText: "", adding: null, clipUrls: {}, photos: {}, imgUrls: {}, fallback: null, session: null, err: ""
+  again: false, holdSel: {}, holdText: {}, statusSel: {}, noteText: {}, noteBy: {}, speaker: {}, colf: {}, editing: null, editMsg: null, editText: "", adding: null, clipUrls: {}, photos: {}, imgUrls: {}, fallback: null, session: null, err: ""
 };
 const MIC_TIP = "You can also talk to text your response.";
 
@@ -550,32 +553,36 @@ function sortBox(st) {
 }
 
 // ---------- one page: New & Outstanding, Follow Up, then the hand-kept sections ----------
-// every status a row can be filtered by: its Next step, its Canvas/tracker badge, and checked or not
-function statusesOf(i) {
-  const out = i.checked_at ? [] : [nextOf(i)];
-  if (i.section === "missing") out.push("🔴 Missing"); else if (i.section === "unknown") out.push("⚫ Unknown");
-  else if (i.section === "followup") out.push(MODE === "kid" ? "🔁 Follow Up Needed" : "🔁 Tracker follow-up");
-  if (i.section === "college") out.push(i.checked_at ? "✔ Checked off" : "☐ Not checked off yet");
-  return out;
+// spreadsheet-style filters on column headings: what each filterable column shows for a row
+const FILTER_COLS = { new: ["Course", "Status"], follow: ["Course", "Next step"], college: ["Area", "Task"], other: ["Course"] };
+function colVals(col, i) {
+  if (col === "Course" || col === "Area") return [i.cls || "—"];
+  if (col === "Next step") return [nextOf(i)];
+  if (col === "Task") return [i.checked_at ? "✔ Checked off" : "☐ Not checked off yet"];
+  if (col === "Status") {
+    const out = [i.section === "missing" ? "🔴 Missing" : i.section === "unknown" ? "⚫ Unknown"
+      : i.section === "followup" ? (MODE === "kid" ? "🔁 Follow Up Needed" : "🔁 Tracker follow-up") : "—"];
+    if (waitFlag(i)) out.push(MODE === "kid" ? "⏳ Waiting for your reply" : `⏳ Waiting on ${i.student}`);
+    return out;
+  }
+  return [];
 }
-function filterBar(st) {
-  const pool = itemsOf(st).filter(i => secOf(i) !== "todo" && secOf(i) !== "resolved");
-  const n = {}; pool.forEach(i => statusesOf(i).forEach(k => { n[k] = (n[k] || 0) + 1; }));
-  if (S.filt && !n[S.filt]) n[S.filt] = 0;
-  const keys = Object.keys(n).sort((a, b) => (/^\W/.test(a) - /^\W/.test(b)) || a.localeCompare(b));
-  return `<div class="filtbar"><label for="filt">Filter by status</label><select id="filt" data-filt="1">
-    <option value="">All items (${pool.length})</option>${keys.map(k => `<option value="${esc(k)}"${k === S.filt ? " selected" : ""}>${esc(k)} (${n[k]})</option>`).join("")}</select>
-    ${S.filt ? `<button class="btn ghost small" data-act="filtclear">✕ Clear filter</button>` : ""}</div>`;
+const colKey = (k, col) => k + "|" + col;
+const passesCols = (k, i) => (FILTER_COLS[k] || []).every(col => { const v = S.colf[colKey(k, col)]; return !v || colVals(col, i).includes(v); });
+function headCell(k, h, list) {
+  if (!(FILTER_COLS[k] || []).includes(h) || !list.length) return `<span>${esc(h)}</span>`;
+  const key = colKey(k, h), cur = S.colf[key] || "";
+  const n = {}; list.forEach(i => colVals(h, i).forEach(v => { n[v] = (n[v] || 0) + 1; }));
+  if (cur && !n[cur]) n[cur] = 0;
+  const vals = Object.keys(n).sort((a, b) => (/^\W/.test(a) - /^\W/.test(b)) || a.localeCompare(b));
+  return `<span class="hf${cur ? " on" : ""}"><span class="hf-l">${esc(h)}</span><select data-colf="${esc(key)}" aria-label="Filter ${esc(h)}">
+    <option value="">All ▾</option>${vals.map(v => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(v)} (${n[v]})</option>`).join("")}</select></span>`;
 }
 function allView(st) {
-  const bar = S.review ? "" : filterBar(st);
-  let shown = itemsOf(st).filter(i => secOf(i) !== "todo" && (!S.review || needsReview(i.id)));
-  if (S.filt && !S.review) shown = shown.filter(i => secOf(i) !== "resolved" && statusesOf(i).includes(S.filt));
+  const shown = itemsOf(st).filter(i => secOf(i) !== "todo" && (!S.review || needsReview(i.id)));
   if (S.review && !shown.length) return `<p class="empty">Nothing waiting for review for ${esc(st)}.</p>`;
-  if (S.filt && !shown.length) return bar + `<p class="empty">Nothing for ${esc(st)} matches "${esc(S.filt)}".</p>`;
   // a heavy bar between sections so New & Outstanding and Follow Up never run together
-  return bar + SECTIONS[st].filter(k => !S.filt || shown.some(i => secOf(i) === k))
-    .map(k => sectionBlock(st, k, shown.filter(i => secOf(i) === k), !S.filt)).filter(Boolean)
+  return SECTIONS[st].map(k => sectionBlock(st, k, shown.filter(i => secOf(i) === k), true)).filter(Boolean)
     .join(`<div class="secdivider" role="separator" aria-hidden="true"></div>`);
 }
 // Mckinley's Nov 1 schools, listed at the top of College Apps
@@ -586,21 +593,24 @@ function schoolList() {
   return `<div class="schools"><div class="schools-h">Nov 1 schools — use these 10 for every task below</div>
     <ol>${NOV1_SCHOOLS.map(n => `<li>${esc(n)}</li>`).join("")}</ol></div>`;
 }
-function sectionBlock(st, k, list, withAdd) {
+function sectionBlock(st, k, all, withAdd) {
+  const list = all.filter(i => passesCols(k, i));
+  const filtered = list.length !== all.length || (FILTER_COLS[k] || []).some(c => S.colf[colKey(k, c)]);
   const handKept = k === "college" || k === "other" || k === "resolved";
   const add = withAdd && MODE === "parent" && !S.review && (k === "college" || k === "other");
-  if (!list.length && !add && (handKept || S.review)) return "";
+  if (!all.length && !add && (handKept || S.review)) return "";
   const blurb = { new: MODE === "kid" ? "Missing or unknown — reply to tell Mom where it stands." : "Missing or unknown, with no reply from the student yet.",
     follow: MODE === "kid" ? "Deadline has passed, and action is currently being taken. The Next step shows what it's waiting on." : "The student has replied, or there's a Next step. Track it to the finish.",
     resolved: "Excused or No Count — already off the student's page. Leaves here after the next hub refresh. Pick another status to bring it back." }[k];
-  let html = `<section class="sect sec-${k}"><h2 class="grph">${esc(SEC_LABEL[k])} <span class="count">${list.length}</span></h2>${blurb ? `<p class="secblurb">${esc(blurb)}</p>` : ""}`;
+  let html = `<section class="sect sec-${k}"><h2 class="grph">${esc(SEC_LABEL[k])} <span class="count">${filtered ? `${list.length} of ${all.length}` : list.length}</span></h2>${blurb ? `<p class="secblurb">${esc(blurb)}</p>` : ""}`;
   if (k === "college") html += schoolList();
   if (add) html += addForm(st, k);
+  if (all.length) html += `<div class="thead th-${k}">${SEC_HEADS[k].map(h => headCell(k, h, all)).join("")}${filtered ? `<button class="linkbtn hf-clear" data-act="colclear" data-sec="${k}">✕ Clear filters</button>` : ""}</div>`;
   if (list.length) {
     const row = k === "new" ? newRow : k === "follow" ? followRow : k === "resolved" ? resolvedRow : card;
-    html += `<div class="thead th-${k}" aria-hidden="true">${SEC_HEADS[k].map(h => `<span>${esc(h)}</span>`).join("")}</div>`
-      + `<div class="list">${groups(k, list)[0].items.map(row).join("")}</div>`;
-  } else if (!add) html += `<p class="empty">None right now.</p>`;
+    html += `<div class="list">${groups(k, list)[0].items.map(row).join("")}</div>`;
+  } else if (all.length) html += `<p class="empty">Nothing here matches the filter.</p>`;
+  else if (!add) html += `<p class="empty">None right now.</p>`;
   return html + `</section>`;
 }
 
@@ -928,7 +938,7 @@ async function act(a, el) {
   const id = el.dataset.id;
   switch (a) {
     case "dismiss": S.notice = ""; render(); break;
-    case "filtclear": S.filt = ""; render(); break;
+    case "colclear": Object.keys(S.colf).forEach(key => { if (key.startsWith(el.dataset.sec + "|")) delete S.colf[key]; }); render(); break;
     case "thumb": {
       const m = S.msgs.find(x => x.id === id); if (!m) return;
       const on = !thumbed(m, meReactor()); el.disabled = true;
@@ -940,7 +950,7 @@ async function act(a, el) {
       await load(); break;
     }
     case "refresh": S.notice = ""; await load(); break;
-    case "sw": S.student = el.dataset.st; ls.set("hub-student", S.student); S.filt = ""; S.adding = null; S.editing = null; render(); if (MODE === "parent") loadClips(); break;
+    case "sw": S.student = el.dataset.st; ls.set("hub-student", S.student); S.colf = {}; S.adding = null; S.editing = null; render(); if (MODE === "parent") loadClips(); break;
     case "review": S.review = !S.review; render(); break;
     case "send": {
       const body = (S.drafts[id] || "").trim(); const photo = S.photos[id];
@@ -1160,7 +1170,7 @@ document.addEventListener("change", e => {
   const t = e.target;
   if (t.dataset.photo !== undefined) { const f = t.files && t.files[0]; if (f) { S.photos[t.dataset.photo] = f; render(); } return; }
   if (t.dataset.check !== undefined) { setCheck(t.dataset.check, t.checked, t); return; }
-  if (t.dataset.filt !== undefined) { S.filt = t.value; render(); return; }
+  if (t.dataset.colf !== undefined) { if (t.value) S.colf[t.dataset.colf] = t.value; else delete S.colf[t.dataset.colf]; render(); return; }
   if (t.dataset.statussel !== undefined) { S.statusSel[t.dataset.statussel] = t.value; render(); }
   if (t.dataset.holdsel !== undefined) {
     const id = t.dataset.holdsel, v = t.value;
