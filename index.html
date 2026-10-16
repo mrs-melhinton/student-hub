@@ -75,6 +75,8 @@ p{margin:0}
 .holdbox.row{flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between}
 .again{gap:6px}
 .again-row{justify-content:space-between;border-top:1px solid var(--line);padding-top:6px}
+.decide{background:var(--accent-soft);border:2px solid var(--accent);border-radius:14px;padding:14px 16px;font-size:1.15rem;line-height:1.4;display:flex;flex-direction:column;gap:6px}
+.decide p{margin:0}
 .stickybox{position:sticky;top:0;z-index:20;background:var(--card);border:2px solid var(--accent);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
 .sb-h{font-weight:700;font-size:1rem}
 .sb-row,.composer.inline{display:flex;flex-direction:row;gap:8px;align-items:flex-end}
@@ -216,7 +218,7 @@ const CLASS_ORDER = {
 };
 // To Do is hidden for now (its items stay in the database). Missing & Unknown and On hold fold into these two.
 const SECTIONS = { Mckinley: ["new", "follow", "college", "other", "resolved"], Kyan: ["new", "follow", "other", "resolved"] };
-const SEC_LABEL = { todo: "📝 To Do", new: "🆕 New & Outstanding", follow: "🔁 Follow Up", college: "🎓 College Apps", other: "🗂 Other", resolved: "✅ Resolved" };
+const SEC_LABEL = { todo: "📝 To Do", new: "⏰ Deadline Has Passed", follow: "🔁 Follow Up", college: "🎓 College Apps", other: "🗂 Other", resolved: "✅ Resolved" };
 const SEC_HEADS = {
   new: ["Course", "Assignment", "Status", "Due", "Messages"],
   follow: ["Course", "Assignment", "Due", "Message history", "Next step", "Reply"],
@@ -453,7 +455,7 @@ function view() {
   const fb = S.fallback ? `<div class="warn">Your browser blocked copying. Select the text below and copy it, then tap "I copied it".
     <pre id="fbtext">${esc(S.fallback.text)}</pre><div class="row" style="margin-top:8px">${S.fallback.ids ? `<button class="btn small" data-act="markcopied">I copied it — mark as copied</button>` : `<button class="btn small" data-act="cancelcopy">Done</button>`}<button class="btn ghost small" data-act="cancelcopy">Cancel</button></div></div>` : "";
   const pv = PREVIEW ? `<div class="warn"><strong>Preview</strong> — this is what Kyan and Mckinley see. Replies are off, and nothing is marked as read.</div>` : "";
-  const top = MODE === "kid" ? generalBox(st) : sortBox(st);
+  const top = MODE === "kid" ? (st === "Mckinley" ? decideNote() : "") + generalBox(st) : sortBox(st);
   return head + pv + sw + bar + `</header>` + nt + fb + `<main class="main">${top}${allView(st)}</main>`;
 }
 
@@ -461,6 +463,12 @@ function signinView() {
   return `<div class="signin"><h2>Sign in</h2><p class="muted">We'll email you a sign-in link. You stay signed in on this device.</p>
     <label class="f">Email<input type="email" id="email" value="${esc(PARENT_EMAIL)}" autocomplete="email"></label>
     <button class="btn" data-act="signin">Email me a sign-in link</button></div>`;
+}
+
+// ---------- Mckinley: these are her call ----------
+function decideNote() {
+  return `<section class="decide" role="note"><p><strong>It's your decision whether you do these or not (for the most part).</strong></p>
+    <p>If you already know you aren't going to do one, just say so, and Mom will remove it — unless we think it's absolutely necessary.</p></section>`;
 }
 
 // ---------- kids: one reply about any of the items ----------
@@ -518,7 +526,7 @@ function sectionBlock(st, k, list, withAdd) {
   const add = withAdd && MODE === "parent" && !S.review && (k === "college" || k === "other");
   if (!list.length && !add && (handKept || S.review)) return "";
   const blurb = { new: MODE === "kid" ? "Missing or unknown — reply to tell Mom where it stands." : "Missing or unknown, with no reply from the student yet.",
-    follow: MODE === "kid" ? "You've replied. The Next step shows what it's waiting on." : "The student has replied, or there's a Next step. Track it to the finish.",
+    follow: MODE === "kid" ? "Deadline has passed, and action is currently being taken. The Next step shows what it's waiting on." : "The student has replied, or there's a Next step. Track it to the finish.",
     resolved: "Excused or No Count — already off the student's page. Leaves here after the next hub refresh. Pick another status to bring it back." }[k];
   let html = `<section class="sect sec-${k}"><h2 class="grph">${esc(SEC_LABEL[k])} <span class="count">${list.length}</span></h2>${blurb ? `<p class="secblurb">${esc(blurb)}</p>` : ""}`;
   if (add) html += addForm(st, k);
@@ -573,7 +581,7 @@ function nextCell(i) {
   const shown = chosen ? (MODE === "kid" && chosen === "Awaiting response from student" ? "Waiting for your reply" : chosen) : autoNext(i);
   let html = `<div class="c-next"><span class="mlabel">Next step</span><div class="next${chosen ? "" : " auto"}">${shown ? esc(shown) : "—"}</div>`;
   if (MODE === "parent") html += nextPicker(i, chosen ? "Change…" : "Set next step…")
-    + `<button class="btn ghost small backbtn" data-act="tonew" data-id="${esc(i.id)}">↩ Move back to New &amp; Outstanding</button>`;
+    + `<button class="btn ghost small backbtn" data-act="tonew" data-id="${esc(i.id)}">↩ Move back to Deadline Has Passed</button>`;
   return html + `</div>`;
 }
 // the Next step dropdown; on a New & Outstanding row, picking one moves the item to Follow Up
@@ -752,7 +760,7 @@ function photoHtml(m) {
 function photoPicker(id) {
   const f = S.photos[id];
   return f ? `<span class="photochip">📷 ${esc(f.name || "photo")} <button class="linkbtn" data-act="photoclear" data-id="${esc(id)}" aria-label="Remove photo">✕</button></span>`
-    : `<label class="btn ghost small photobtn">📷 Add photo<input type="file" accept="image/*" data-photo="${esc(id)}" hidden></label>`;
+    : `<label class="btn ghost small photobtn">📷 Add photo${MODE === "kid" ? " (optional)" : ""}<input type="file" accept="image/*" data-photo="${esc(id)}" hidden></label>`;
 }
 
 function kidComposer(i) {
@@ -911,7 +919,7 @@ async function act(a, el) {
       const u = await sb.from("item_place").upsert({ item_id: id, place: "new", set_at: new Date().toISOString() });
       const err = d.error || u.error;
       if (err) { el.disabled = false; notice("Couldn't move it: " + err.message); return; }
-      S.notice = "Moved back to New & Outstanding."; await load(); break;
+      S.notice = "Moved back to Deadline Has Passed."; await load(); break;
     }
     case "msgedit": { const m = S.msgs.find(x => x.id === id); if (!m) return; S.editMsg = id; S.editText = m.body || ""; render(); break; }
     case "msgcancel": S.editMsg = null; S.editText = ""; render(); break;
