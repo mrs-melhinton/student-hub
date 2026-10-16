@@ -88,6 +88,11 @@ p{margin:0}
 .thumbbtn{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:2px 10px;font:inherit;font-size:.85rem;cursor:pointer;min-height:28px}
 .thumbbtn[aria-pressed="true"]{background:var(--fu-soft);border-color:var(--fu);color:var(--fu);font-weight:600}
 .thumbtag{font-size:.82rem;font-weight:600;color:var(--fu);background:var(--fu-soft);border-radius:999px;padding:2px 9px}
+.filtbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
+.filtbar label{font-weight:700}
+.filtbar select{font:inherit;padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);max-width:100%}
+.chip.waitflag{background:#fdf0d5;color:#8a5a00;border:1px solid #e8b44c;font-weight:700}
+@media (prefers-color-scheme:dark){.chip.waitflag{background:#3a2c10;color:#f2c56b;border-color:#8a6414}}
 .decide{background:var(--accent-soft);border:2px solid var(--accent);border-radius:14px;padding:14px 16px;font-size:1.15rem;line-height:1.4;display:flex;flex-direction:column;gap:6px}
 .decide p{margin:0}
 .stickybox{position:sticky;top:0;z-index:20;background:var(--card);border:2px solid var(--accent);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
@@ -306,7 +311,7 @@ const ls = {
 const S = {
   phase: "loading", items: [], msgs: [], student: STUDENTS.includes(ls.get("hub-student")) ? ls.get("hub-student") : "Kyan",
   open: new Set(), review: false, drafts: {}, notice: "", general: "", applySel: {},
-  again: false, holdSel: {}, holdText: {}, statusSel: {}, noteText: {}, noteBy: {}, speaker: {}, editing: null, editMsg: null, editText: "", adding: null, clipUrls: {}, photos: {}, imgUrls: {}, fallback: null, session: null, err: ""
+  again: false, holdSel: {}, holdText: {}, statusSel: {}, noteText: {}, noteBy: {}, speaker: {}, filt: "", editing: null, editMsg: null, editText: "", adding: null, clipUrls: {}, photos: {}, imgUrls: {}, fallback: null, session: null, err: ""
 };
 const MIC_TIP = "You can also talk to text your response.";
 
@@ -545,11 +550,32 @@ function sortBox(st) {
 }
 
 // ---------- one page: New & Outstanding, Follow Up, then the hand-kept sections ----------
+// every status a row can be filtered by: its Next step, its Canvas/tracker badge, and checked or not
+function statusesOf(i) {
+  const out = i.checked_at ? [] : [nextOf(i)];
+  if (i.section === "missing") out.push("🔴 Missing"); else if (i.section === "unknown") out.push("⚫ Unknown");
+  else if (i.section === "followup") out.push(MODE === "kid" ? "🔁 Follow Up Needed" : "🔁 Tracker follow-up");
+  if (i.section === "college") out.push(i.checked_at ? "✔ Checked off" : "☐ Not checked off yet");
+  return out;
+}
+function filterBar(st) {
+  const pool = itemsOf(st).filter(i => secOf(i) !== "todo" && secOf(i) !== "resolved");
+  const n = {}; pool.forEach(i => statusesOf(i).forEach(k => { n[k] = (n[k] || 0) + 1; }));
+  if (S.filt && !n[S.filt]) n[S.filt] = 0;
+  const keys = Object.keys(n).sort((a, b) => (/^\W/.test(a) - /^\W/.test(b)) || a.localeCompare(b));
+  return `<div class="filtbar"><label for="filt">Filter by status</label><select id="filt" data-filt="1">
+    <option value="">All items (${pool.length})</option>${keys.map(k => `<option value="${esc(k)}"${k === S.filt ? " selected" : ""}>${esc(k)} (${n[k]})</option>`).join("")}</select>
+    ${S.filt ? `<button class="btn ghost small" data-act="filtclear">✕ Clear filter</button>` : ""}</div>`;
+}
 function allView(st) {
-  const shown = itemsOf(st).filter(i => secOf(i) !== "todo" && (!S.review || needsReview(i.id)));
+  const bar = S.review ? "" : filterBar(st);
+  let shown = itemsOf(st).filter(i => secOf(i) !== "todo" && (!S.review || needsReview(i.id)));
+  if (S.filt && !S.review) shown = shown.filter(i => secOf(i) !== "resolved" && statusesOf(i).includes(S.filt));
   if (S.review && !shown.length) return `<p class="empty">Nothing waiting for review for ${esc(st)}.</p>`;
+  if (S.filt && !shown.length) return bar + `<p class="empty">Nothing for ${esc(st)} matches "${esc(S.filt)}".</p>`;
   // a heavy bar between sections so New & Outstanding and Follow Up never run together
-  return SECTIONS[st].map(k => sectionBlock(st, k, shown.filter(i => secOf(i) === k), true)).filter(Boolean)
+  return bar + SECTIONS[st].filter(k => !S.filt || shown.some(i => secOf(i) === k))
+    .map(k => sectionBlock(st, k, shown.filter(i => secOf(i) === k), !S.filt)).filter(Boolean)
     .join(`<div class="secdivider" role="separator" aria-hidden="true"></div>`);
 }
 // Mckinley's Nov 1 schools, listed at the top of College Apps
@@ -592,7 +618,7 @@ function stateBadge(i) {
 }
 function itemCell(i) {
   const rev = MODE === "parent" && needsReview(i.id) ? `<span class="chip rev">Needs review</span>` : "";
-  return `<div class="c-item"><div class="name">${nameHtml(i)}</div>${rev}</div>`;
+  return `<div class="c-item"><div class="name">${nameHtml(i)}</div>${rev}${waitFlag(i)}</div>`;
 }
 const courseCell = i => `<div class="c-course"><div class="cls">${esc(i.cls || "—")}</div></div>`;
 const dueCell = i => `<div class="c-due"><span class="mlabel">Due</span>${i.due ? esc(i.due) : "—"}</div>`;
@@ -616,9 +642,19 @@ function autoNext(i) {
   return MODE === "kid" ? "Waiting for your reply" : "Awaiting response from student";
 }
 const nextLabel = h => (h === "Awaiting response" ? "Awaiting response from student" : h);
+function nextOf(i) {
+  const chosen = i.hold ? nextLabel(i.hold) : null;
+  return chosen ? (MODE === "kid" && chosen === "Awaiting response from student" ? "Waiting for your reply" : chosen) : autoNext(i);
+}
+// the flag: this item is waiting on the student's reply
+const waitsOnKid = i => nextOf(i) === (MODE === "kid" ? "Waiting for your reply" : "Awaiting response from student");
+function waitFlag(i) {
+  if (secOf(i) === "resolved" || i.checked_at || !waitsOnKid(i)) return "";
+  return `<span class="chip waitflag">⏳ ${MODE === "kid" ? "Waiting for your reply" : `Waiting on ${esc(i.student)}`}</span>`;
+}
 function nextCell(i) {
   const chosen = i.hold ? nextLabel(i.hold) : null;
-  const shown = chosen ? (MODE === "kid" && chosen === "Awaiting response from student" ? "Waiting for your reply" : chosen) : autoNext(i);
+  const shown = nextOf(i);
   let html = `<div class="c-next"><span class="mlabel">Next step</span><div class="next${chosen ? "" : " auto"}">${shown ? esc(shown) : "—"}</div>`;
   if (MODE === "parent") html += nextPicker(i, chosen ? "Change…" : "Set next step…")
     + `<button class="btn ghost small backbtn" data-act="tonew" data-id="${esc(i.id)}">↩ Move back to Deadline Has Passed</button>`;
@@ -685,7 +721,7 @@ function card(i) {
   else if (i.section === "todo") meta = i.reminder ? `<span class="chip">Study reminder</span> ${esc(i.due)}` : (i.due ? `Due ${esc(i.due)} ${esc(i.tag)}` : "No due date");
   else meta = i.due ? `Due ${esc(i.due)}` : "";
   const rev = (MODE === "parent" && needsReview(i.id) ? `<span class="chip rev">Needs review</span>` : "")
-    + (i.hold ? `<span class="chip holdchip">⏸ ${esc(i.hold)}</span>` : "");
+    + (i.hold ? `<span class="chip holdchip">⏸ ${esc(i.hold)}</span>` : "") + waitFlag(i);
   const isChk = i.section === "college";
   const talk = (t.length ? t.map(msgView).join("") : isChk ? "" : `<p class="none">No messages yet</p>`)
     + (MODE === "kid" ? kidComposer(i) : parentComposer(i));
@@ -892,6 +928,7 @@ async function act(a, el) {
   const id = el.dataset.id;
   switch (a) {
     case "dismiss": S.notice = ""; render(); break;
+    case "filtclear": S.filt = ""; render(); break;
     case "thumb": {
       const m = S.msgs.find(x => x.id === id); if (!m) return;
       const on = !thumbed(m, meReactor()); el.disabled = true;
@@ -903,7 +940,7 @@ async function act(a, el) {
       await load(); break;
     }
     case "refresh": S.notice = ""; await load(); break;
-    case "sw": S.student = el.dataset.st; ls.set("hub-student", S.student); S.adding = null; S.editing = null; render(); if (MODE === "parent") loadClips(); break;
+    case "sw": S.student = el.dataset.st; ls.set("hub-student", S.student); S.filt = ""; S.adding = null; S.editing = null; render(); if (MODE === "parent") loadClips(); break;
     case "review": S.review = !S.review; render(); break;
     case "send": {
       const body = (S.drafts[id] || "").trim(); const photo = S.photos[id];
@@ -1123,6 +1160,7 @@ document.addEventListener("change", e => {
   const t = e.target;
   if (t.dataset.photo !== undefined) { const f = t.files && t.files[0]; if (f) { S.photos[t.dataset.photo] = f; render(); } return; }
   if (t.dataset.check !== undefined) { setCheck(t.dataset.check, t.checked, t); return; }
+  if (t.dataset.filt !== undefined) { S.filt = t.value; render(); return; }
   if (t.dataset.statussel !== undefined) { S.statusSel[t.dataset.statussel] = t.value; render(); }
   if (t.dataset.holdsel !== undefined) {
     const id = t.dataset.holdsel, v = t.value;
