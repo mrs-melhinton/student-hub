@@ -370,10 +370,12 @@ function thumbsHtml(m) {
 function lastReply(id) { const r = threadOf(id).filter(m => m.kind === "reply"); return r[r.length - 1] || null; }
 function needsReview(id) {
   // replies Melissa typed in herself don't need her review; replies she sorted onto this item do
-  const t = threadOf(id); const r = t.filter(m => m.kind === "reply" && (m.entered_by !== "parent" || m.applied_from)); if (!r.length) return false;
-  if (thumbed(r[r.length - 1], "parent")) return false;
-  const s = t.filter(m => m.kind === "status");
-  return !s.length || r[r.length - 1].created_at > s[s.length - 1].created_at;
+  const t = liveThread(id); const r = t.filter(m => m.kind === "reply" && (m.entered_by !== "parent" || m.applied_from)); if (!r.length) return false;
+  const last = r[r.length - 1];
+  if (thumbed(last, "parent")) return false;
+  // answered by a status, or a message from Melissa (removed messages don't count), sent after the latest reply
+  const a = t.filter(m => m.author === "parent" && (m.kind === "status" || m.kind === "message"));
+  return !a.length || last.created_at > a[a.length - 1].created_at;
 }
 // latest status Mom set on an item (null if none)
 function lastStatus(id) { const s = threadOf(id).filter(m => m.kind === "status"); return s.length ? s[s.length - 1].status : null; }
