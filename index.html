@@ -181,6 +181,18 @@ p{margin:0}
 .meta{font-size:.92rem;color:var(--muted)}
 .detail{font-size:.95rem;overflow-wrap:anywhere}
 .chip{display:inline-block;font-size:.78rem;font-weight:600;padding:2px 8px;border-radius:6px;background:var(--todo-soft);color:var(--todo)}
+.work{margin-top:6px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:.95rem}
+.work summary{cursor:pointer;padding:8px 12px;font-weight:600;color:var(--accent);min-height:40px;display:flex;align-items:center;gap:6px;list-style:none}
+.work summary::-webkit-details-marker{display:none}
+.work summary::before{content:'▸';display:inline-block;transition:transform .15s}
+.work[open] summary::before{transform:rotate(90deg)}
+.work-body{padding:0 12px 10px;display:flex;flex-direction:column;gap:6px}
+.work-text{overflow-wrap:anywhere}
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.steps li{display:grid;grid-template-columns:1.4em 1fr;gap:4px;overflow-wrap:anywhere}
+.steps li.done{color:var(--muted)} .steps li.done .st-text{text-decoration:line-through}
+.st-box{font-weight:700} .steps li.done .st-box{color:var(--ok)}
+.st-due{color:var(--muted);font-size:.88rem;white-space:nowrap}
 .toggle{align-self:flex-start;border:0;background:transparent;color:var(--accent);font:inherit;font-size:.95rem;font-weight:600;padding:6px 0;min-height:40px;cursor:pointer}
 .thread{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:10px;margin-top:4px}
 .msg{border-radius:10px;padding:9px 12px;font-size:.98rem;overflow-wrap:anywhere}
@@ -321,6 +333,16 @@ const MIC_TIP = "You can also talk to text your response.";
 // ---------- helpers ----------
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const br = s => esc(s).replace(/\n/g, "<br>");
+// "What it takes": the tracker's plain summary of the work plus its step checklist (tracker items in Details classes).
+// Read-only here; the tracker sets both. Collapsed by default so the list stays calm.
+function workHtml(i) {
+  const steps = Array.isArray(i.steps) ? i.steps.filter(x => x && x.text) : [];
+  if (!i.work && !steps.length) return "";
+  const left = steps.filter(x => !x.done).length;
+  const label = steps.length ? `What it takes · ${left ? `${left} of ${steps.length} steps left` : "all steps done"}` : "What it takes";
+  const list = steps.length ? `<ul class="steps">${steps.map(x => `<li class="${x.done ? "done" : ""}"><span class="st-box">${x.done ? "✓" : "☐"}</span><span><span class="st-text">${esc(x.text)}</span>${x.due ? ` <span class="st-due">by ${esc(x.due)}</span>` : ""}</span></li>`).join("")}</ul>` : "";
+  return `<details class="work"><summary>${esc(label)}</summary><div class="work-body">${i.work ? `<div class="work-text">${br(i.work)}</div>` : ""}${list}</div></details>`;
+}
 const rank = (st, c) => { const i = (CLASS_ORDER[st] || []).indexOf(c); return i < 0 ? 99 : i; };
 // New & Outstanding = missing/unknown with no reply from the student yet. A reply (or a next step) moves it to Follow Up.
 const secOf = i => {
@@ -630,7 +652,7 @@ function stateBadge(i) {
 }
 function itemCell(i) {
   const rev = MODE === "parent" && needsReview(i.id) ? `<span class="chip rev">Needs review</span>` : "";
-  return `<div class="c-item"><div class="name">${nameHtml(i)}</div>${rev}${waitFlag(i)}</div>`;
+  return `<div class="c-item"><div class="name">${nameHtml(i)}</div>${rev}${waitFlag(i)}${workHtml(i)}</div>`;
 }
 const courseCell = i => `<div class="c-course"><div class="cls">${esc(i.cls || "—")}</div></div>`;
 const dueCell = i => `<div class="c-due"><span class="mlabel">Due</span>${i.due ? esc(i.due) : "—"}</div>`;
@@ -695,7 +717,7 @@ function followRow(i) {
 
 function todoLine(i, when) {
   const nm = i.link ? `<a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.name)}</a>` : esc(i.name);
-  return `<li class="tline"><span class="t-cls">${esc(i.cls || "")}</span><span class="t-name">${i.bold ? `<strong>${nm}</strong>` : nm}${when ? ` <span class="t-when">${when}</span>` : ""}${i.detail ? `<span class="t-detail">${br(i.detail)}</span>` : ""}</span></li>`;
+  return `<li class="tline"><span class="t-cls">${esc(i.cls || "")}</span><span class="t-name">${i.bold ? `<strong>${nm}</strong>` : nm}${when ? ` <span class="t-when">${when}</span>` : ""}${i.detail ? `<span class="t-detail">${br(i.detail)}</span>` : ""}${workHtml(i)}</span></li>`;
 }
 function todoList(list) {
   return groups("todo", list).map(g => {
@@ -739,7 +761,7 @@ function card(i) {
     + (MODE === "kid" ? kidComposer(i) : parentComposer(i));
   return `<article class="card ${i.section}${isChk && i.checked_at ? " checked" : ""}" id="card-${sid(i.id)}">
     <div class="c-course">${i.cls ? `<div class="cls">${esc(i.cls)}</div>` : `<div class="cls none-cls">—</div>`}</div>
-    <div class="c-item">${isChk ? `<label class="chkrow"><input type="checkbox" class="chkbox" data-check="${esc(i.id)}"${i.checked_at ? " checked" : ""}${PREVIEW ? " disabled" : ""} aria-label="Done: ${esc(i.name)}"><span class="name">${name}</span></label>` : `<div class="name">${name}</div>`}${i.detail ? `<div class="detail">${br(i.detail)}</div>` : ""}${isChk && i.checked_at ? `<div class="chkline">✔ Done · checked by ${esc(whoLabel(i.checked_by))} · ${when(i.checked_at)}</div>` : ""}</div>
+    <div class="c-item">${isChk ? `<label class="chkrow"><input type="checkbox" class="chkbox" data-check="${esc(i.id)}"${i.checked_at ? " checked" : ""}${PREVIEW ? " disabled" : ""} aria-label="Done: ${esc(i.name)}"><span class="name">${name}</span></label>` : `<div class="name">${name}</div>`}${i.detail ? `<div class="detail">${br(i.detail)}</div>` : ""}${workHtml(i)}${isChk && i.checked_at ? `<div class="chkline">✔ Done · checked by ${esc(whoLabel(i.checked_by))} · ${when(i.checked_at)}</div>` : ""}</div>
     <div class="c-due">${meta ? `<div class="meta">${meta}</div>` : ""}${rev}</div>
     <div class="c-talk thread"${un && !PREVIEW ? ` data-unread="${esc(i.id)}"` : ""}>${talk}</div>
   </article>`;
