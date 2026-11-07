@@ -80,6 +80,7 @@ p{margin:0}
 .schools-h{font-weight:700;margin-bottom:6px}
 .schools ol{margin:0;padding-left:1.4em;columns:2;column-gap:28px}
 .schools li{padding:2px 0}
+.schools-g+.schools-g{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
 @media (max-width:560px){.schools ol{columns:1}}
 .chkrow{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
 .chkbox{width:24px;height:24px;flex:none;margin-top:1px;accent-color:var(--fu);cursor:pointer}
@@ -609,13 +610,20 @@ function allView(st) {
   return SECTIONS[st].map(k => sectionBlock(st, k, shown.filter(i => secOf(i) === k), true)).filter(Boolean)
     .join(`<div class="secdivider" role="separator" aria-hidden="true"></div>`);
 }
-// Mckinley's Nov 1 schools, listed at the top of College Apps
-const NOV1_SCHOOLS = ["Chapman University", "Seattle University", "University of Oregon", "Western Washington University",
-  "Santa Clara University", "Loyola Marymount University", "University of San Diego", "Northeastern University", "USC",
-  "University of Chicago (due Nov 2)"];
+// Mckinley's schools by application deadline, listed at the top of College Apps (Melissa, Nov 7, 2026)
+const SCHOOL_GROUPS = [
+  { due: "Nov 1", note: "use these 10 for every task below", schools: ["Chapman University", "Seattle University",
+    "University of Oregon", "Western Washington University", "Santa Clara University", "Loyola Marymount University",
+    "University of San Diego", "Northeastern University", "USC", "University of Chicago (due Nov 2)"] },
+  { due: "Nov 15", schools: ["University of Washington"] },
+  { due: "Nov 30", schools: ["University of California, Berkeley", "University of California, Davis",
+    "University of California, Irvine", "University of California, Los Angeles", "University of California, San Diego",
+    "University of California, Santa Barbara", "University of California, Santa Cruz"] },
+  { due: "Dec 1", schools: ["Cal Poly San Luis Obispo", "Whitman University"] },
+];
 function schoolList() {
-  return `<div class="schools"><div class="schools-h">Nov 1 schools — use these 10 for every task below</div>
-    <ol>${NOV1_SCHOOLS.map(n => `<li>${esc(n)}</li>`).join("")}</ol></div>`;
+  return `<div class="schools">${SCHOOL_GROUPS.map(g => `<div class="schools-g"><div class="schools-h">Due ${esc(g.due)} — ${g.schools.length} school${g.schools.length === 1 ? "" : "s"}${g.note ? ` · ${esc(g.note)}` : ""}</div>
+    <ol>${g.schools.map(n => `<li>${esc(n)}</li>`).join("")}</ol></div>`).join("")}</div>`;
 }
 function sectionBlock(st, k, all, withAdd) {
   const list = all.filter(i => passesCols(k, i));
