@@ -612,14 +612,11 @@ function allView(st) {
 }
 // Mckinley's schools by application deadline, listed at the top of College Apps (Melissa, Nov 7, 2026)
 const SCHOOL_GROUPS = [
-  { due: "Nov 1", note: "use these 10 for every task below", schools: ["Chapman University", "Seattle University",
-    "University of Oregon", "Western Washington University", "Santa Clara University", "Loyola Marymount University",
-    "University of San Diego", "Northeastern University", "USC", "University of Chicago (due Nov 2)"] },
   { due: "Nov 15", schools: ["University of Washington"] },
   { due: "Nov 30", schools: ["University of California, Berkeley", "University of California, Davis",
     "University of California, Irvine", "University of California, Los Angeles", "University of California, San Diego",
     "University of California, Santa Barbara", "University of California, Santa Cruz"] },
-  { due: "Dec 1", schools: ["Cal Poly San Luis Obispo", "Whitman University"] },
+  { due: "Dec 1", schools: ["Cal Poly San Luis Obispo", "Whitman College"] },
 ];
 function schoolList() {
   return `<div class="schools">${SCHOOL_GROUPS.map(g => `<div class="schools-g"><div class="schools-h">Due ${esc(g.due)} — ${g.schools.length} school${g.schools.length === 1 ? "" : "s"}${g.note ? ` · ${esc(g.note)}` : ""}</div>
