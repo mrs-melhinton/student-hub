@@ -334,14 +334,14 @@ const MIC_TIP = "You can also talk to text your response.";
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const br = s => esc(s).replace(/\n/g, "<br>");
 // "What it takes": the tracker's plain summary of the work plus its step checklist (tracker items in Details classes).
-// Read-only here; the tracker sets both. Collapsed by default so the list stays calm.
+// Read-only here; the tracker sets both. Open by default (Melissa, Nov 7, 2026); tap the bar to fold one away.
 function workHtml(i) {
   const steps = Array.isArray(i.steps) ? i.steps.filter(x => x && x.text) : [];
   if (!i.work && !steps.length) return "";
   const left = steps.filter(x => !x.done).length;
   const label = steps.length ? `What it takes · ${left ? `${left} of ${steps.length} steps left` : "all steps done"}` : "What it takes";
   const list = steps.length ? `<ul class="steps">${steps.map(x => `<li class="${x.done ? "done" : ""}"><span class="st-box">${x.done ? "✓" : "☐"}</span><span><span class="st-text">${esc(x.text)}</span>${x.due ? ` <span class="st-due">by ${esc(x.due)}</span>` : ""}</span></li>`).join("")}</ul>` : "";
-  return `<details class="work"><summary>${esc(label)}</summary><div class="work-body">${i.work ? `<div class="work-text">${br(i.work)}</div>` : ""}${list}</div></details>`;
+  return `<details class="work" open><summary>${esc(label)}</summary><div class="work-body">${i.work ? `<div class="work-text">${br(i.work)}</div>` : ""}${list}</div></details>`;
 }
 const rank = (st, c) => { const i = (CLASS_ORDER[st] || []).indexOf(c); return i < 0 ? 99 : i; };
 // New & Outstanding = missing/unknown with no reply from the student yet. A reply (or a next step) moves it to Follow Up.
