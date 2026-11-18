@@ -95,6 +95,8 @@ p{margin:0}
 .hf.on select{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 .hf-clear{grid-column:1/-1;justify-self:start;text-transform:none;letter-spacing:0}
 .chip.waitflag{background:#fdf0d5;color:#8a5a00;border:1px solid #e8b44c;font-weight:700}
+.chip.missflag{background:var(--miss-soft);color:var(--miss);border:1px solid var(--miss);font-weight:700}
+.flags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
 @media (prefers-color-scheme:dark){.chip.waitflag{background:#3a2c10;color:#f2c56b;border-color:#8a6414}}
 .decide{background:var(--accent-soft);border:2px solid var(--accent);border-radius:14px;padding:14px 16px;font-size:1.15rem;line-height:1.4;display:flex;flex-direction:column;gap:6px}
 .decide p{margin:0}
@@ -588,6 +590,7 @@ function colVals(col, i) {
     const out = [i.section === "missing" ? "🔴 Missing" : i.section === "unknown" ? "⚫ Unknown"
       : i.section === "followup" ? (MODE === "kid" ? "🔁 Follow Up Needed" : "🔁 Tracker follow-up") : "—"];
     if (waitFlag(i)) out.push(MODE === "kid" ? "⏳ Waiting for your reply" : `⏳ Waiting on ${i.student}`);
+    out.push(...missVals(i));
     return out;
   }
   return [];
@@ -657,7 +660,7 @@ function stateBadge(i) {
 }
 function itemCell(i) {
   const rev = MODE === "parent" && needsReview(i.id) ? `<span class="chip rev">Needs review</span>` : "";
-  return `<div class="c-item"><div class="name">${nameHtml(i)}</div>${rev}${waitFlag(i)}${workHtml(i)}</div>`;
+  return `<div class="c-item"><div class="name">${nameHtml(i)}</div>${rev}${waitFlag(i)}${missFlag(i)}${workHtml(i)}</div>`;
 }
 const courseCell = i => `<div class="c-course"><div class="cls">${esc(i.cls || "—")}</div></div>`;
 const dueCell = i => `<div class="c-due"><span class="mlabel">Due</span>${i.due ? esc(i.due) : "—"}</div>`;
@@ -691,6 +694,12 @@ function waitFlag(i) {
   if (secOf(i) === "resolved" || i.checked_at || !waitsOnKid(i)) return "";
   return `<span class="chip waitflag">⏳ ${MODE === "kid" ? "Waiting for your reply" : `Waiting on ${esc(i.student)}`}</span>`;
 }
+// Canvas / Skyward say Missing (tracker flags canvas_missing, skyward_missing; Option 7b keeps them current)
+const missVals = i => [i.canvas_missing ? "🔴 Canvas: Missing" : "", i.skyward_missing ? "🔴 Skyward: Missing" : ""].filter(Boolean);
+function missFlag(i) {
+  const v = missVals(i);
+  return v.length ? `<div class="flags">${v.map(x => `<span class="chip missflag">${x}</span>`).join("")}</div>` : "";
+}
 function nextCell(i) {
   const chosen = i.hold ? nextLabel(i.hold) : null;
   const shown = nextOf(i);
@@ -722,7 +731,7 @@ function followRow(i) {
 
 function todoLine(i, when) {
   const nm = i.link ? `<a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.name)}</a>` : esc(i.name);
-  return `<li class="tline"><span class="t-cls">${esc(i.cls || "")}</span><span class="t-name">${i.bold ? `<strong>${nm}</strong>` : nm}${when ? ` <span class="t-when">${when}</span>` : ""}${i.detail ? `<span class="t-detail">${br(i.detail)}</span>` : ""}${workHtml(i)}</span></li>`;
+  return `<li class="tline"><span class="t-cls">${esc(i.cls || "")}</span><span class="t-name">${i.bold ? `<strong>${nm}</strong>` : nm}${when ? ` <span class="t-when">${when}</span>` : ""}${i.detail ? `<span class="t-detail">${br(i.detail)}</span>` : ""}${missFlag(i)}${workHtml(i)}</span></li>`;
 }
 function todoList(list) {
   return groups("todo", list).map(g => {
@@ -766,7 +775,7 @@ function card(i) {
     + (MODE === "kid" ? kidComposer(i) : parentComposer(i));
   return `<article class="card ${i.section}${isChk && i.checked_at ? " checked" : ""}" id="card-${sid(i.id)}">
     <div class="c-course">${i.cls ? `<div class="cls">${esc(i.cls)}</div>` : `<div class="cls none-cls">—</div>`}</div>
-    <div class="c-item">${isChk ? `<label class="chkrow"><input type="checkbox" class="chkbox" data-check="${esc(i.id)}"${i.checked_at ? " checked" : ""}${PREVIEW ? " disabled" : ""} aria-label="Done: ${esc(i.name)}"><span class="name">${name}</span></label>` : `<div class="name">${name}</div>`}${i.detail ? `<div class="detail">${br(i.detail)}</div>` : ""}${workHtml(i)}${isChk && i.checked_at ? `<div class="chkline">✔ Done · checked by ${esc(whoLabel(i.checked_by))} · ${when(i.checked_at)}</div>` : ""}</div>
+    <div class="c-item">${isChk ? `<label class="chkrow"><input type="checkbox" class="chkbox" data-check="${esc(i.id)}"${i.checked_at ? " checked" : ""}${PREVIEW ? " disabled" : ""} aria-label="Done: ${esc(i.name)}"><span class="name">${name}</span></label>` : `<div class="name">${name}</div>`}${i.detail ? `<div class="detail">${br(i.detail)}</div>` : ""}${missFlag(i)}${workHtml(i)}${isChk && i.checked_at ? `<div class="chkline">✔ Done · checked by ${esc(whoLabel(i.checked_by))} · ${when(i.checked_at)}</div>` : ""}</div>
     <div class="c-due">${meta ? `<div class="meta">${meta}</div>` : ""}${rev}</div>
     <div class="c-talk thread"${un && !PREVIEW ? ` data-unread="${esc(i.id)}"` : ""}>${talk}</div>
   </article>`;
