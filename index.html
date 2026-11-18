@@ -97,6 +97,8 @@ p{margin:0}
 .chip.waitflag{background:#fdf0d5;color:#8a5a00;border:1px solid #e8b44c;font-weight:700}
 .chip.missflag{background:var(--miss-soft);color:var(--miss);border:1px solid var(--miss);font-weight:700}
 .flags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.srcline{margin-top:4px;font-size:.88rem;color:var(--muted)}
+.srcline .sm{color:var(--miss);font-weight:700}
 @media (prefers-color-scheme:dark){.chip.waitflag{background:#3a2c10;color:#f2c56b;border-color:#8a6414}}
 .decide{background:var(--accent-soft);border:2px solid var(--accent);border-radius:14px;padding:14px 16px;font-size:1.15rem;line-height:1.4;display:flex;flex-direction:column;gap:6px}
 .decide p{margin:0}
@@ -658,9 +660,10 @@ function stateBadge(i) {
   return i.section === "missing" ? `<span class="badge miss">🔴 Missing</span>` : i.section === "unknown" ? `<span class="badge unk">⚫ Unknown</span>`
     : i.section === "followup" ? `<span class="badge fu">🔁 ${MODE === "kid" ? "Follow Up Needed" : "Tracker follow-up"}</span>` : "";
 }
-function itemCell(i) {
+function itemCell(i, follow) {
   const rev = MODE === "parent" && needsReview(i.id) ? `<span class="chip rev">Needs review</span>` : "";
-  return `<div class="c-item"><div class="name">${nameHtml(i)}</div>${rev}${waitFlag(i)}${missFlag(i)}${workHtml(i)}</div>`;
+  // Follow Up rows show the source line in place of the separate Missing tags
+  return `<div class="c-item"><div class="name">${nameHtml(i)}</div>${rev}${waitFlag(i)}${follow && i.src_summary ? srcLine(i) : missFlag(i)}${workHtml(i)}</div>`;
 }
 const courseCell = i => `<div class="c-course"><div class="cls">${esc(i.cls || "—")}</div></div>`;
 const dueCell = i => `<div class="c-due"><span class="mlabel">Due</span>${i.due ? esc(i.due) : "—"}</div>`;
@@ -700,6 +703,12 @@ function missFlag(i) {
   const v = missVals(i);
   return v.length ? `<div class="flags">${v.map(x => `<span class="chip missflag">${x}</span>`).join("")}</div>` : "";
 }
+// Follow Up rows: one line on where the sources stand (tracker src_summary, e.g. "Missing: Canvas · Skyward: Not Yet Graded")
+function srcLine(i) {
+  if (!i.src_summary) return "";
+  const parts = String(i.src_summary).split(" · ").map(x => x.startsWith("Missing:") ? `<span class="sm">🔴 ${esc(x)}</span>` : esc(x));
+  return `<div class="srcline">${parts.join(" · ")}</div>`;
+}
 function nextCell(i) {
   const chosen = i.hold ? nextLabel(i.hold) : null;
   const shown = nextOf(i);
@@ -724,7 +733,7 @@ function resolvedRow(i) {
 }
 function followRow(i) {
   const un = unreadOf(i.id);
-  return `<article class="card row-follow" id="card-${sid(i.id)}">${courseCell(i)}${itemCell(i)}${dueCell(i)}
+  return `<article class="card row-follow" id="card-${sid(i.id)}">${courseCell(i)}${itemCell(i, true)}${dueCell(i)}
     <div class="c-hist thread"${un && !PREVIEW ? ` data-unread="${esc(i.id)}"` : ""}><span class="mlabel">Message history</span>${historyHtml(i)}</div>
     ${nextCell(i)}<div class="c-reply">${composerFor(i)}</div></article>`;
 }
